@@ -475,6 +475,56 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        /* Floating action bar */
+        .floating-actions {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 12px 30px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            z-index: 1000;
+            border-top: 1px solid var(--border);
+        }
+        
+        .floating-actions button {
+            padding: 10px 20px;
+            font-size: 14px;
+        }
+        
+        .floating-actions .btn-primary {
+            padding: 12px 30px;
+            font-size: 15px;
+        }
+        
+        /* Add padding to body to account for floating bar */
+        body {
+            padding-bottom: 80px;
+        }
+        
+        /* Hide floating bar when not on config tab */
+        .floating-actions.hidden {
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            .floating-actions {
+                padding: 10px 15px;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+            
+            .floating-actions button {
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -668,14 +718,8 @@
                 </div>
             </div>
             
-            <div class="button-group">
-                <button type="button" class="btn-secondary" onclick="loadConfig()">🔄 Recarregar Config</button>
-                <button type="button" class="btn-secondary" onclick="validateConfig()">✅ Validar</button>
-                <button type="submit" class="btn-primary">💾 Salvar Configuração</button>
-            </div>
-            
             <div style="margin-top: 15px; padding: 15px; background: var(--bg); border-radius: 8px; font-size: 13px;">
-                <strong>💡 Dica:</strong> Após salvar, use <strong>"🔄 Reconectar"</strong> na barra de ações rápidas para aplicar as mudanças no Discord.
+                <strong>💡 Dica:</strong> Use os botões na barra inferior para salvar e reconectar. Após salvar, clique em <strong>"🔄 Reconectar"</strong> para aplicar as mudanças no Discord.
             </div>
             
             <div id="diagnosisResult" style="margin-top: 20px; display: none;"></div>
@@ -903,6 +947,15 @@ return $json;</pre>
         </div>
     </div>
     
+    <!-- Floating Action Bar -->
+    <div class="floating-actions" id="floatingActions">
+        <button type="button" class="btn-secondary" onclick="loadConfig()">🔄 Recarregar</button>
+        <button type="button" class="btn-secondary" onclick="validateConfig()">✅ Validar</button>
+        <button type="button" class="btn-secondary" onclick="checkBotStatus()">🔍 Status</button>
+        <button type="button" class="btn-secondary" onclick="forceReconnect()" style="background: #23A55A; color: white; border: none;">🔄 Reconectar</button>
+        <button type="button" class="btn-primary" onclick="saveConfig()">💾 Salvar Configuração</button>
+    </div>
+    
     <script>
         let webhookCounter = 0;
         let eventSource = null;
@@ -1030,11 +1083,56 @@ return $json;</pre>
             event.target.classList.add('active');
             document.getElementById(tabName + 'Tab').classList.add('active');
             
+            // Show/hide floating actions based on tab
+            const floatingActions = document.getElementById('floatingActions');
+            if (tabName === 'config') {
+                floatingActions.classList.remove('hidden');
+            } else {
+                floatingActions.classList.add('hidden');
+            }
+            
             if (tabName === 'logs') {
                 startLogStream();
             } else if (eventSource) {
                 eventSource.close();
                 eventSource = null;
+            }
+        }
+        
+        // Save configuration (called by floating button)
+        async function saveConfig() {
+            const form = document.getElementById('configForm');
+            const formData = new FormData(form);
+            const config = Object.fromEntries(formData);
+            
+            // Collect webhooks
+            const webhooks = {};
+            document.querySelectorAll('.webhook-item').forEach(item => {
+                const nameInput = item.querySelector('.webhook-name');
+                const urlInput = item.querySelector('input[type="text"]:not(.webhook-name)');
+                if (nameInput.value.trim() && urlInput.value.trim()) {
+                    webhooks[nameInput.value.trim()] = urlInput.value.trim();
+                }
+            });
+            config.N8N_WEBHOOKS_PARSED = webhooks;
+            
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('✅ Configuração salva com sucesso!', 'success');
+                    updateWebhookCount();
+                } else {
+                    throw new Error(data.error || 'Falha ao salvar configuração');
+                }
+            } catch (error) {
+                showToast('❌ Erro ao salvar: ' + error.message, 'error');
             }
         }
         
@@ -1252,42 +1350,10 @@ return $json;</pre>
             }
         }
         
-        // Save configuration
+        // Save configuration (form submit - redirect to saveConfig function)
         document.getElementById('configForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
-            try {
-                const formData = new FormData(e.target);
-                const config = Object.fromEntries(formData);
-                
-                // Collect webhooks
-                const webhooks = {};
-                document.querySelectorAll('.webhook-item').forEach(item => {
-                    const nameInput = item.querySelector('.webhook-name');
-                    const urlInput = item.querySelector('input[type="text"]:not(.webhook-name)');
-                    if (nameInput.value.trim() && urlInput.value.trim()) {
-                        webhooks[nameInput.value.trim()] = urlInput.value.trim();
-                    }
-                });
-                config.N8N_WEBHOOKS_PARSED = webhooks;
-                
-                const response = await fetch('/api/config', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(config)
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showToast('Configuração salva com sucesso!', 'success');
-                    updateWebhookCount();
-                } else {
-                    throw new Error(data.error || 'Falha ao salvar configuração');
-                }
-            } catch (error) {
-                showToast('Erro ao salvar: ' + error.message, 'error');
-            }
+            saveConfig();
         });
         
         // Run comprehensive token and connection diagnosis
