@@ -1,13 +1,30 @@
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Load environment variables from config.env file
-// This is the main configuration file where you store all your tokens, URLs, and keys
-dotenv.config({ path: join(__dirname, '..', 'config.env') });
+const configEnvPath = join(__dirname, '..', 'config.env');
+console.log(`[Config] Loading config from: ${configEnvPath}`);
+
+// Check if file exists
+if (fs.existsSync(configEnvPath)) {
+  console.log(`[Config] config.env file exists`);
+  const stats = fs.statSync(configEnvPath);
+  console.log(`[Config] config.env size: ${stats.size} bytes`);
+} else {
+  console.log(`[Config] ⚠️ config.env file NOT FOUND at ${configEnvPath}`);
+}
+
+const result = dotenv.config({ path: configEnvPath });
+if (result.error) {
+  console.log(`[Config] ⚠️ Error loading config.env: ${result.error.message}`);
+} else {
+  console.log(`[Config] config.env loaded successfully`);
+}
 
 /**
  * Validates that required environment variables are present
@@ -122,12 +139,24 @@ function parseWebhooks(webhooksJson) {
 /**
  * Configuration object with all environment variables
  */
+/**
+ * Clean a token string by removing whitespace and invisible characters
+ */
+function cleanToken(token) {
+  if (!token) return null;
+  // Remove invisible characters (zero-width spaces, BOM, control chars, etc.)
+  const cleaned = token
+    .replace(/[\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF]/g, '')
+    .trim();
+  return cleaned || null;
+}
+
 const config = {
   // Required
   discord: {
-    // Trim token to avoid whitespace issues
-    token: process.env.DISCORD_TOKEN ? process.env.DISCORD_TOKEN.trim() : null,
-    clientId: process.env.DISCORD_CLIENT_ID ? process.env.DISCORD_CLIENT_ID.trim() : null,
+    // Clean token to avoid whitespace and invisible character issues
+    token: cleanToken(process.env.DISCORD_TOKEN),
+    clientId: cleanToken(process.env.DISCORD_CLIENT_ID),
   },
   n8n: {
     // Default webhook (for backward compatibility)
@@ -165,12 +194,27 @@ validateConfig();
 
 // Log config loading (without sensitive data)
 if (process.env.DISCORD_TOKEN) {
-  const token = process.env.DISCORD_TOKEN.trim();
-  const tokenMasked = token.length > 14 
-    ? `${token.substring(0, 10)}...${token.substring(token.length - 4)}`
+  const rawToken = process.env.DISCORD_TOKEN;
+  const cleanedToken = cleanToken(rawToken);
+  const tokenMasked = cleanedToken && cleanedToken.length > 14 
+    ? `${cleanedToken.substring(0, 10)}...${cleanedToken.substring(cleanedToken.length - 4)}`
     : '***';
-  console.log(`[Config] Discord token loaded: ${tokenMasked} (length: ${token.length})`);
-  console.log(`[Config] Token has whitespace: ${process.env.DISCORD_TOKEN !== process.env.DISCORD_TOKEN.trim()}`);
+  
+  const hasInvisibleChars = /[\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF]/.test(rawToken);
+  const hasWhitespace = rawToken !== rawToken.trim();
+  
+  console.log(`[Config] Discord token loaded: ${tokenMasked}`);
+  console.log(`[Config] Token length - raw: ${rawToken.length}, cleaned: ${cleanedToken?.length || 0}`);
+  console.log(`[Config] Token has whitespace: ${hasWhitespace}`);
+  console.log(`[Config] Token has invisible chars: ${hasInvisibleChars}`);
+  console.log(`[Config] Token parts (split by .): ${cleanedToken?.split('.').length || 0}`);
+  
+  if (hasInvisibleChars) {
+    console.log('[Config] ⚠️ WARNING: Token contains invisible characters that were removed!');
+  }
+  if (hasWhitespace) {
+    console.log('[Config] ⚠️ WARNING: Token had whitespace that was trimmed!');
+  }
 } else {
   console.log('[Config] Discord token not found in environment');
 }

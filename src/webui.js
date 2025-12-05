@@ -522,6 +522,126 @@ app.get('/api/bot-status', async (req, res) => {
   }
 });
 
+// API: Diagnose token and connection issues
+app.get('/api/diagnose', async (req, res) => {
+  try {
+    const configContent = await readConfigFile();
+    const config = parseEnv(configContent);
+    const token = config.DISCORD_TOKEN || '';
+    const tokenTrimmed = token.trim();
+    
+    // Check for invisible/special characters
+    const hasInvisibleChars = /[\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF]/.test(token);
+    const firstBytes = token.substring(0, 20).split('').map(c => c.charCodeAt(0));
+    const lastBytes = token.substring(Math.max(0, token.length - 10)).split('').map(c => c.charCodeAt(0));
+    
+    // Clean token (remove any invisible characters)
+    const tokenCleaned = token.replace(/[\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF]/g, '').trim();
+    
+    const diagnosis = {
+      timestamp: new Date().toISOString(),
+      configFile: {
+        exists: !!configContent,
+        size: configContent.length,
+        path: configPath,
+      },
+      token: {
+        exists: !!token,
+        isEmpty: tokenTrimmed === '',
+        isPlaceholder: tokenTrimmed === 'your_discord_bot_token_here',
+        length: tokenTrimmed.length,
+        lengthRaw: token.length,
+        lengthCleaned: tokenCleaned.length,
+        hasWhitespace: token !== tokenTrimmed,
+        hasInvisibleChars: hasInvisibleChars,
+        whitespaceDetails: {
+          leadingSpaces: token.length - token.trimStart().length,
+          trailingSpaces: token.length - token.trimEnd().length,
+        },
+        format: {
+          parts: tokenTrimmed.split('.').length,
+          startsWithAlphanumeric: /^[A-Za-z0-9]/.test(tokenTrimmed),
+          containsDots: tokenTrimmed.includes('.'),
+          firstPartLength: tokenTrimmed.split('.')[0]?.length || 0,
+          secondPartLength: tokenTrimmed.split('.')[1]?.length || 0,
+          thirdPartLength: tokenTrimmed.split('.')[2]?.length || 0,
+        },
+        masked: tokenTrimmed.length > 14 
+          ? `${tokenTrimmed.substring(0, 10)}...${tokenTrimmed.substring(tokenTrimmed.length - 4)}`
+          : '***',
+        firstBytes: firstBytes,
+        lastBytes: lastBytes,
+      },
+      discordClient: {
+        exists: !!discordClient,
+        isReady: discordClient?.isReady() || false,
+        user: discordClient?.user ? {
+          id: discordClient.user.id,
+          tag: discordClient.user.tag,
+          username: discordClient.user.username,
+        } : null,
+        ws: {
+          status: discordClient?.ws?.status,
+          ping: discordClient?.ws?.ping,
+        },
+      },
+    };
+    
+    // Try to validate token with Discord API directly
+    if (tokenTrimmed && tokenTrimmed !== 'your_discord_bot_token_here') {
+      try {
+        const axios = (await import('axios')).default;
+        const response = await axios.get('https://discord.com/api/v10/users/@me', {
+          headers: {
+            'Authorization': `Bot ${tokenTrimmed}`,
+          },
+          timeout: 10000,
+        });
+        
+        diagnosis.apiTest = {
+          success: true,
+          status: response.status,
+          user: {
+            id: response.data.id,
+            username: response.data.username,
+            discriminator: response.data.discriminator,
+            bot: response.data.bot,
+          },
+        };
+        
+        addLogEntry('info', `✅ Token válido! Bot: ${response.data.username}#${response.data.discriminator}`, {
+          botId: response.data.id,
+          botUsername: response.data.username,
+        });
+      } catch (apiError) {
+        diagnosis.apiTest = {
+          success: false,
+          status: apiError.response?.status,
+          statusText: apiError.response?.statusText,
+          error: apiError.message,
+          code: apiError.code,
+          response: apiError.response?.data,
+        };
+        
+        if (apiError.response?.status === 401) {
+          addLogEntry('error', '❌ Token INVÁLIDO - Discord rejeitou a autenticação (401)', {
+            error: apiError.response?.data,
+          });
+        } else {
+          addLogEntry('error', `❌ Erro ao testar token: ${apiError.message}`, {
+            status: apiError.response?.status,
+            code: apiError.code,
+          });
+        }
+      }
+    }
+    
+    res.json({ success: true, diagnosis });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 const PORT = process.env.WEBUI_PORT || 3001;
 
 export function startWebUI() {

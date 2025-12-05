@@ -6,18 +6,29 @@ import { formatMessageEvent } from './payload.js';
 import { sendToN8n } from './relay.js';
 import { startWebUI as startConfigWebUI, addLogEntry, setDiscordClient } from './webui.js';
 
-// Log configuration on startup
-logger.info('Discord Relay Bot starting...', {
+// Log configuration on startup (send to both console and WebUI)
+console.log('='.repeat(60));
+console.log('Discord Relay Bot - Starting...');
+console.log('='.repeat(60));
+
+const startupInfo = {
   hasToken: !!config.discord.token,
   tokenLength: config.discord.token ? config.discord.token.length : 0,
   tokenIsPlaceholder: config.discord.token === 'your_discord_bot_token_here',
   hasClientId: !!config.discord.clientId,
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ],
-});
+};
+
+console.log(`[Startup] Token exists: ${startupInfo.hasToken}`);
+console.log(`[Startup] Token length: ${startupInfo.tokenLength}`);
+console.log(`[Startup] Token is placeholder: ${startupInfo.tokenIsPlaceholder}`);
+
+if (config.discord.token && config.discord.token.length > 14) {
+  const masked = `${config.discord.token.substring(0, 10)}...${config.discord.token.substring(config.discord.token.length - 4)}`;
+  console.log(`[Startup] Token (masked): ${masked}`);
+}
+
+logger.info('Discord Relay Bot starting...', startupInfo);
+addLogEntry('info', 'Bot iniciando...', startupInfo);
 
 // Create Discord client with required intents
 const client = new Client({

@@ -347,8 +347,10 @@
             padding: 15px;
             font-family: 'Courier New', monospace;
             font-size: 12px;
-            max-height: 500px;
-            overflow-y: auto;
+            min-height: 400px;
+            max-height: 600px;
+            height: 500px;
+            overflow-y: scroll;
             margin-top: 20px;
         }
         
@@ -622,8 +624,11 @@
                 <button type="button" class="btn-secondary" onclick="loadConfig()">🔄 Recarregar</button>
                 <button type="button" class="btn-secondary" onclick="validateConfig()">✅ Validar</button>
                 <button type="button" class="btn-secondary" onclick="checkBotStatus()">🔍 Verificar Status</button>
+                <button type="button" class="btn-secondary" onclick="runDiagnosis()" style="background: #5865F2;">🩺 Diagnosticar Token</button>
                 <button type="submit" class="btn-primary">💾 Salvar Configuração</button>
             </div>
+            
+            <div id="diagnosisResult" style="margin-top: 20px; display: none;"></div>
         </form>
     </div>
     
@@ -1117,6 +1122,120 @@ return $json;</pre>
                 showToast('Erro ao salvar: ' + error.message, 'error');
             }
         });
+        
+        // Run comprehensive token and connection diagnosis
+        async function runDiagnosis() {
+            const resultDiv = document.getElementById('diagnosisResult');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = '';
+            
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'test-result';
+            loadingDiv.textContent = '🩺 Executando diagnóstico completo...';
+            resultDiv.appendChild(loadingDiv);
+            
+            try {
+                const response = await fetch('/api/diagnose');
+                const data = await response.json();
+                
+                resultDiv.textContent = '';
+                
+                if (data.success && data.diagnosis) {
+                    const d = data.diagnosis;
+                    
+                    // Build diagnosis report
+                    const report = document.createElement('div');
+                    report.style.cssText = 'background: #2B2D31; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 400px; overflow-y: auto;';
+                    
+                    let html = '📋 DIAGNÓSTICO COMPLETO\n';
+                    html += '═══════════════════════════════════════\n\n';
+                    
+                    // Token Info
+                    html += '🔑 TOKEN:\n';
+                    html += `   Existe: ${d.token.exists ? '✅' : '❌'}\n`;
+                    html += `   Vazio: ${d.token.isEmpty ? '❌ SIM' : '✅ NÃO'}\n`;
+                    html += `   É placeholder: ${d.token.isPlaceholder ? '❌ SIM' : '✅ NÃO'}\n`;
+                    html += `   Comprimento (raw): ${d.token.lengthRaw} chars\n`;
+                    html += `   Comprimento (trimmed): ${d.token.length} chars ${d.token.length >= 59 ? '✅' : '⚠️ (esperado 59+)'}\n`;
+                    html += `   Comprimento (limpo): ${d.token.lengthCleaned} chars\n`;
+                    html += `   Espaços em branco: ${d.token.hasWhitespace ? '⚠️ SIM' : '✅ NÃO'}\n`;
+                    html += `   Caracteres invisíveis: ${d.token.hasInvisibleChars ? '❌ SIM (problema!)' : '✅ NÃO'}\n`;
+                    if (d.token.hasWhitespace) {
+                        html += `     - Espaços iniciais: ${d.token.whitespaceDetails.leadingSpaces}\n`;
+                        html += `     - Espaços finais: ${d.token.whitespaceDetails.trailingSpaces}\n`;
+                    }
+                    html += `   Formato:\n`;
+                    html += `     - Partes (separadas por .): ${d.token.format.parts} ${d.token.format.parts === 3 ? '✅' : '❌ (esperado 3)'}\n`;
+                    html += `     - Começa com alfanumérico: ${d.token.format.startsWithAlphanumeric ? '✅' : '❌'}\n`;
+                    html += `     - Parte 1 comprimento: ${d.token.format.firstPartLength}\n`;
+                    html += `     - Parte 2 comprimento: ${d.token.format.secondPartLength}\n`;
+                    html += `     - Parte 3 comprimento: ${d.token.format.thirdPartLength}\n`;
+                    html += `   Token mascarado: ${d.token.masked}\n`;
+                    html += `   Primeiros bytes: [${d.token.firstBytes?.join(', ') || 'N/A'}]\n`;
+                    html += `   Últimos bytes: [${d.token.lastBytes?.join(', ') || 'N/A'}]\n`;
+                    html += `   Config file: ${d.configFile?.path || 'N/A'}\n\n`;
+                    
+                    // API Test
+                    if (d.apiTest) {
+                        html += '🌐 TESTE DE API DISCORD:\n';
+                        if (d.apiTest.success) {
+                            html += `   Status: ✅ SUCESSO (${d.apiTest.status})\n`;
+                            html += `   Bot ID: ${d.apiTest.user.id}\n`;
+                            html += `   Username: ${d.apiTest.user.username}\n`;
+                            html += `   É bot: ${d.apiTest.user.bot ? '✅' : '❌'}\n`;
+                        } else {
+                            html += `   Status: ❌ FALHOU\n`;
+                            html += `   HTTP Status: ${d.apiTest.status || 'N/A'}\n`;
+                            html += `   Erro: ${d.apiTest.error}\n`;
+                            html += `   Código: ${d.apiTest.code || 'N/A'}\n`;
+                            if (d.apiTest.response) {
+                                html += `   Resposta: ${JSON.stringify(d.apiTest.response)}\n`;
+                            }
+                            if (d.apiTest.status === 401) {
+                                html += '\n   ⚠️ TOKEN INVÁLIDO!\n';
+                                html += '   Verifique se você copiou o token corretamente.\n';
+                                html += '   O token deve ser do tipo "Bot Token" do Discord Developer Portal.\n';
+                            }
+                        }
+                        html += '\n';
+                    }
+                    
+                    // Discord Client
+                    html += '🤖 CLIENTE DISCORD:\n';
+                    html += `   Existe: ${d.discordClient.exists ? '✅' : '❌'}\n`;
+                    html += `   Conectado: ${d.discordClient.isReady ? '✅' : '❌'}\n`;
+                    if (d.discordClient.user) {
+                        html += `   Bot ID: ${d.discordClient.user.id}\n`;
+                        html += `   Bot Tag: ${d.discordClient.user.tag}\n`;
+                    }
+                    html += `   WS Status: ${d.discordClient.ws.status}\n`;
+                    html += `   WS Ping: ${d.discordClient.ws.ping}ms\n`;
+                    
+                    report.textContent = html;
+                    resultDiv.appendChild(report);
+                    
+                    // Show toast with summary
+                    if (d.apiTest?.success) {
+                        showToast('✅ Token válido! Bot pode se conectar ao Discord.', 'success');
+                    } else if (d.apiTest?.status === 401) {
+                        showToast('❌ Token INVÁLIDO! Discord rejeitou a autenticação.', 'error');
+                    } else if (d.apiTest?.error) {
+                        showToast(`❌ Erro na API: ${d.apiTest.error}`, 'error');
+                    }
+                } else {
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'test-result error';
+                    errorDiv.textContent = `❌ Erro: ${data.error || 'Erro desconhecido'}`;
+                    resultDiv.appendChild(errorDiv);
+                }
+            } catch (error) {
+                resultDiv.textContent = '';
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'test-result error';
+                errorDiv.textContent = `❌ Erro: ${error.message}`;
+                resultDiv.appendChild(errorDiv);
+            }
+        }
         
         // Real-time logs
         function startLogStream() {
