@@ -368,15 +368,36 @@ if (token && token !== 'your_discord_bot_token_here' && tokenTrimmed !== '') {
   }
   
   // Attempt login with detailed error handling
-  logger.info('Attempting Discord login...');
-  addLogEntry('info', 'Tentando fazer login no Discord...');
+  console.log('[Login] ========================================');
+  console.log('[Login] About to call client.login()');
+  console.log(`[Login] Token length: ${tokenTrimmed.length}`);
+  console.log(`[Login] Token (masked): ${tokenTrimmed.substring(0, 10)}...${tokenTrimmed.substring(tokenTrimmed.length - 4)}`);
+  console.log(`[Login] Client ready state before login: ${client.isReady()}`);
+  console.log(`[Login] WS status before login: ${client.ws.status}`);
+  console.log('[Login] ========================================');
   
-  client.login(tokenTrimmed)
-    .then(() => {
+  logger.info('Attempting Discord login...');
+  addLogEntry('info', '🔄 Chamando client.login()...');
+  
+  // Use async/await for better error handling
+  (async () => {
+    try {
+      console.log('[Login] Calling client.login() NOW...');
+      addLogEntry('info', '🔄 Executando login...');
+      
+      const loginResult = await client.login(tokenTrimmed);
+      
+      console.log('[Login] client.login() returned:', loginResult ? 'token' : 'undefined');
+      console.log(`[Login] Client ready after login: ${client.isReady()}`);
+      console.log(`[Login] WS status after login: ${client.ws.status}`);
+      
       logger.info('Discord login successful');
       addLogEntry('info', '✅ Login no Discord bem-sucedido!');
-    })
-    .catch((error) => {
+    } catch (error) {
+      console.log('[Login] ERROR in client.login():', error.message);
+      console.log('[Login] Error code:', error.code);
+      console.log('[Login] Error name:', error.name);
+      
       // Detailed error logging
       const errorDetails = {
         error: error.message,
@@ -415,6 +436,14 @@ if (token && token !== 'your_discord_bot_token_here' && tokenTrimmed !== '') {
           suggestion: 'Wait a few minutes before trying again',
         });
         addLogEntry('error', '❌ Rate limit: Muitas tentativas de login. Aguarde alguns minutos', {});
+      } else if (error.message.includes('Disallowed') || error.message.includes('intents')) {
+        logger.error('INTENTS ERROR: Disallowed intents', {
+          suggestion: 'Enable MESSAGE CONTENT INTENT in Discord Developer Portal',
+          intents: client.options.intents.toArray(),
+        });
+        addLogEntry('error', '❌ Erro de Intents: Habilite MESSAGE CONTENT INTENT no Developer Portal', {
+          intents: client.options.intents.toArray(),
+        });
       } else {
         logger.error('UNKNOWN ERROR: Unexpected error during Discord login', errorDetails);
         addLogEntry('error', `❌ Erro desconhecido: ${error.message}`, {
@@ -426,7 +455,8 @@ if (token && token !== 'your_discord_bot_token_here' && tokenTrimmed !== '') {
       if (!enableWebUI) {
         process.exit(1);
       }
-    });
+    }
+  })();
 } else {
   if (enableWebUI) {
     logger.warn('Discord bot token not configured. Please configure via web UI at http://localhost:' + (process.env.WEBUI_PORT || 3001));

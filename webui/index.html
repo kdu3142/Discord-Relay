@@ -341,42 +341,69 @@
         }
         
         .logs-container {
-            background: #1E1F22;
-            color: #DCDDDE;
-            border-radius: 6px;
-            padding: 15px;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
+            background: #1a1a2e !important;
+            color: #e0e0e0 !important;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'Courier New', Consolas, Monaco, monospace;
+            font-size: 13px;
             min-height: 400px;
             max-height: 600px;
             height: 500px;
             overflow-y: scroll;
             margin-top: 20px;
+            border: 1px solid #333;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
         }
         
         .log-entry {
-            padding: 5px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding: 8px 10px;
+            margin: 4px 0;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.03);
+            border-left: 3px solid transparent;
+            color: #e0e0e0 !important;
         }
         
-        .log-entry:last-child {
-            border-bottom: none;
+        .log-entry:hover {
+            background: rgba(255,255,255,0.06);
         }
         
         .log-timestamp {
-            color: #72767D;
-            margin-right: 10px;
+            color: #888 !important;
+            margin-right: 12px;
+            font-size: 11px;
         }
         
         .log-level {
-            font-weight: 600;
-            margin-right: 10px;
+            font-weight: 700;
+            margin-right: 12px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            text-transform: uppercase;
         }
         
-        .log-level.info { color: #23A55A; }
-        .log-level.warn { color: #F0B232; }
-        .log-level.error { color: #F23F42; }
-        .log-level.debug { color: #5865F2; }
+        .log-level.info { 
+            color: #4ade80 !important; 
+            background: rgba(74, 222, 128, 0.1);
+        }
+        .log-level.warn { 
+            color: #fbbf24 !important; 
+            background: rgba(251, 191, 36, 0.1);
+        }
+        .log-level.error { 
+            color: #f87171 !important; 
+            background: rgba(248, 113, 113, 0.1);
+        }
+        .log-level.debug { 
+            color: #60a5fa !important; 
+            background: rgba(96, 165, 250, 0.1);
+        }
+        
+        .log-message {
+            color: #e0e0e0 !important;
+        }
         
         .docs-content {
             line-height: 1.8;
@@ -625,6 +652,7 @@
                 <button type="button" class="btn-secondary" onclick="validateConfig()">✅ Validar</button>
                 <button type="button" class="btn-secondary" onclick="checkBotStatus()">🔍 Verificar Status</button>
                 <button type="button" class="btn-secondary" onclick="runDiagnosis()" style="background: #5865F2;">🩺 Diagnosticar Token</button>
+                <button type="button" class="btn-secondary" onclick="forceReconnect()" style="background: #23A55A;">🔄 Forçar Reconexão</button>
                 <button type="submit" class="btn-primary">💾 Salvar Configuração</button>
             </div>
             
@@ -1237,6 +1265,29 @@ return $json;</pre>
             }
         }
         
+        // Force reconnect to Discord
+        async function forceReconnect() {
+            showToast('🔄 Forçando reconexão ao Discord...', 'info');
+            
+            try {
+                const response = await fetch('/api/reconnect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('✅ Reconexão bem-sucedida!', 'success');
+                    setTimeout(checkBotStatus, 2000);
+                } else {
+                    showToast(`❌ Falha ao reconectar: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showToast(`❌ Erro: ${error.message}`, 'error');
+            }
+        }
+        
         // Real-time logs
         function startLogStream() {
             if (eventSource) return;
@@ -1280,19 +1331,20 @@ return $json;</pre>
             const container = document.getElementById('logsContainer');
             const entry = document.createElement('div');
             entry.className = 'log-entry';
-            
+
             // Create elements safely to prevent XSS
             const timeSpan = document.createElement('span');
             timeSpan.className = 'log-timestamp';
             timeSpan.textContent = `[${new Date(log.timestamp).toLocaleTimeString()}]`;
-            
+
             const levelSpan = document.createElement('span');
             levelSpan.className = `log-level ${log.level}`;
-            levelSpan.textContent = `[${log.level.toUpperCase()}]`;
-            
+            levelSpan.textContent = log.level.toUpperCase();
+
             const messageSpan = document.createElement('span');
+            messageSpan.className = 'log-message';
             messageSpan.textContent = log.message; // Safe: textContent escapes HTML
-            
+
             entry.appendChild(timeSpan);
             entry.appendChild(levelSpan);
             entry.appendChild(messageSpan);

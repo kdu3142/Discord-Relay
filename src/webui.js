@@ -642,6 +642,86 @@ app.get('/api/diagnose', async (req, res) => {
   }
 });
 
+// API: Force reconnect to Discord
+app.post('/api/reconnect', async (req, res) => {
+  try {
+    if (!discordClient) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Discord client not available' 
+      });
+    }
+    
+    addLogEntry('info', '🔄 Forçando reconexão ao Discord...');
+    
+    // Get token from config
+    const configContent = await readConfigFile();
+    const config = parseEnv(configContent);
+    const token = config.DISCORD_TOKEN?.trim();
+    
+    if (!token || token === 'your_discord_bot_token_here') {
+      return res.status(400).json({
+        success: false,
+        error: 'Token not configured',
+      });
+    }
+    
+    // Clean token
+    const cleanedToken = token.replace(/[\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF]/g, '').trim();
+    
+    // Log before reconnect
+    console.log('[Reconnect] Destroying current connection...');
+    addLogEntry('info', '🔄 Destruindo conexão atual...');
+    
+    // Destroy current connection
+    discordClient.destroy();
+    
+    console.log('[Reconnect] Client destroyed, waiting 2 seconds...');
+    addLogEntry('info', '⏳ Aguardando 2 segundos...');
+    
+    // Wait a bit before reconnecting
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    console.log('[Reconnect] Attempting login...');
+    addLogEntry('info', '🔄 Tentando reconectar...');
+    
+    try {
+      await discordClient.login(cleanedToken);
+      
+      console.log('[Reconnect] Login successful!');
+      addLogEntry('info', '✅ Reconexão bem-sucedida!');
+      
+      res.json({
+        success: true,
+        message: 'Reconnected successfully',
+        status: {
+          isReady: discordClient.isReady(),
+          wsStatus: discordClient.ws.status,
+          user: discordClient.user ? {
+            id: discordClient.user.id,
+            tag: discordClient.user.tag,
+          } : null,
+        },
+      });
+    } catch (loginError) {
+      console.log('[Reconnect] Login failed:', loginError.message);
+      addLogEntry('error', `❌ Falha ao reconectar: ${loginError.message}`, {
+        error: loginError.message,
+        code: loginError.code,
+      });
+      
+      res.json({
+        success: false,
+        error: loginError.message,
+        code: loginError.code,
+      });
+    }
+  } catch (error) {
+    addLogEntry('error', `Erro ao reconectar: ${error.message}`);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 const PORT = process.env.WEBUI_PORT || 3001;
 
 export function startWebUI() {
