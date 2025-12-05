@@ -8,13 +8,8 @@ services:
     container_name: discord-relay
     restart: unless-stopped
     environment:
-      # Required
-      - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
-      # Optional
-      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID:-}
-      - RELAY_SHARED_SECRET=${RELAY_SHARED_SECRET:-}
-      - ALLOWED_GUILD_IDS=${ALLOWED_GUILD_IDS:-}
+      # Only set non-sensitive defaults here
+      # All sensitive config (tokens, secrets) should be in config.env file
       - BOT_PREFIX=${BOT_PREFIX:-!bot}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - NODE_ENV=${NODE_ENV:-production}
@@ -23,9 +18,8 @@ services:
     ports:
       - "${WEBUI_PORT:-3001}:3001"  # Web UI port for configuration
     volumes:
-      - ./config.env:/app/config.env:rw  # Persist config.env file so web UI can save configuration
+      - ./config.env:/app/config.env:rw  # Main configuration file - edit this or use Web UI
     # Bot connects outbound to Discord Gateway (no inbound ports needed for bot itself)
-    # No volumes needed - stateless application
     # Optional: join existing network if n8n is on same network
     # networks:
     #   - default

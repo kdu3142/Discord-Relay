@@ -481,6 +481,11 @@
     <div class="header">
         <h1>🤖 Discord Relay Bot</h1>
         <p>Painel de Controle e Configuração</p>
+        <div id="connectionIndicator" style="display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 12px; border-radius: 20px; background: rgba(255,255,255,0.1); font-size: 12px;">
+            <span id="connectionDot" style="width: 10px; height: 10px; border-radius: 50%; background: #888;"></span>
+            <span id="connectionText">Verificando...</span>
+            <span id="pingDisplay" style="opacity: 0.7;"></span>
+        </div>
     </div>
     
     <div class="tabs">
@@ -495,18 +500,6 @@
     <div id="configTab" class="tab-content active">
         <div class="info-cards">
             <div class="info-card">
-                <div class="icon">🔐</div>
-                <h3>Método HTTP</h3>
-                <div class="value">POST</div>
-                <div class="help-text">Todos os webhooks n8n devem usar método POST</div>
-            </div>
-            <div class="info-card">
-                <div class="icon">🔗</div>
-                <h3>Webhooks Configurados</h3>
-                <div class="value" id="webhookCount">0</div>
-                <div class="help-text">Total de webhooks ativos</div>
-            </div>
-            <div class="info-card">
                 <div class="icon">✅</div>
                 <h3>Status do Bot</h3>
                 <div class="value" id="botStatus">Verificando...</div>
@@ -514,9 +507,37 @@
             </div>
             <div class="info-card">
                 <div class="icon">🎯</div>
-                <h3>Intents Configurados</h3>
+                <h3>Intents</h3>
                 <div class="value" id="intentsStatus">-</div>
                 <div class="help-text" id="intentsHelp">Verifique no Developer Portal</div>
+            </div>
+            <div class="info-card">
+                <div class="icon">🔗</div>
+                <h3>Webhooks</h3>
+                <div class="value" id="webhookCount">0</div>
+                <div class="help-text">Total de webhooks ativos</div>
+            </div>
+            <div class="info-card">
+                <div class="icon">💬</div>
+                <h3>Como Chamar</h3>
+                <div class="value" id="howToCall" style="font-size: 14px;">!bot</div>
+                <div class="help-text">Prefixo ou @menção</div>
+            </div>
+        </div>
+        
+        <!-- Quick Actions Bar -->
+        <div class="section" style="padding: 15px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+            <span style="font-weight: 600; color: var(--text-light);">⚡ Ações Rápidas:</span>
+            <button type="button" class="btn-secondary" onclick="checkBotStatus()" style="font-size: 12px;">🔍 Status</button>
+            <button type="button" class="btn-secondary" onclick="runDiagnosis()" style="font-size: 12px; background: #5865F2; color: white; border: none;">🩺 Diagnóstico</button>
+            <button type="button" class="btn-secondary" onclick="forceReconnect()" style="font-size: 12px; background: #23A55A; color: white; border: none;">🔄 Reconectar</button>
+            <button type="button" class="btn-secondary" onclick="reloadServerConfig()" style="font-size: 12px;">📄 Reload Config</button>
+            <div style="margin-left: auto; display: flex; align-items: center; gap: 15px;">
+                <span id="serverUptime" style="font-size: 11px; color: var(--text-light);">⏱️ --</span>
+                <label style="display: flex; align-items: center; gap: 5px; font-size: 12px;">
+                    <input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()" checked>
+                    Auto (10s)
+                </label>
             </div>
         </div>
         
@@ -648,12 +669,13 @@
             </div>
             
             <div class="button-group">
-                <button type="button" class="btn-secondary" onclick="loadConfig()">🔄 Recarregar</button>
+                <button type="button" class="btn-secondary" onclick="loadConfig()">🔄 Recarregar Config</button>
                 <button type="button" class="btn-secondary" onclick="validateConfig()">✅ Validar</button>
-                <button type="button" class="btn-secondary" onclick="checkBotStatus()">🔍 Verificar Status</button>
-                <button type="button" class="btn-secondary" onclick="runDiagnosis()" style="background: #5865F2;">🩺 Diagnosticar Token</button>
-                <button type="button" class="btn-secondary" onclick="forceReconnect()" style="background: #23A55A;">🔄 Forçar Reconexão</button>
                 <button type="submit" class="btn-primary">💾 Salvar Configuração</button>
+            </div>
+            
+            <div style="margin-top: 15px; padding: 15px; background: var(--bg); border-radius: 8px; font-size: 13px;">
+                <strong>💡 Dica:</strong> Após salvar, use <strong>"🔄 Reconectar"</strong> na barra de ações rápidas para aplicar as mudanças no Discord.
             </div>
             
             <div id="diagnosisResult" style="margin-top: 20px; display: none;"></div>
@@ -663,11 +685,27 @@
     <!-- Logs Tab -->
     <div id="logsTab" class="tab-content">
         <div class="section">
-            <div class="section-title">📊 Logs em Tempo Real</div>
+            <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>📊 Logs em Tempo Real</span>
+                <div style="display: flex; gap: 10px;">
+                    <button type="button" class="btn-secondary" onclick="clearLogs()" style="font-size: 12px;">🗑️ Limpar</button>
+                    <button type="button" class="btn-secondary" onclick="downloadLogs()" style="font-size: 12px;">📥 Download</button>
+                    <select id="logLevelFilter" onchange="filterLogs()" style="font-size: 12px; padding: 5px;">
+                        <option value="all">Todos</option>
+                        <option value="error">Apenas Erros</option>
+                        <option value="warn">Avisos+</option>
+                        <option value="info">Info+</option>
+                        <option value="debug">Debug</option>
+                    </select>
+                </div>
+            </div>
             <div class="logs-container" id="logsContainer">
                 <div class="log-entry">
                     <span class="log-timestamp">Carregando logs...</span>
                 </div>
+            </div>
+            <div style="margin-top: 10px; font-size: 12px; color: var(--text-light);">
+                <span id="logCount">0</span> entradas | Últimos <span id="maxLogs">100</span> logs
             </div>
         </div>
     </div>
@@ -868,6 +906,107 @@ return $json;</pre>
     <script>
         let webhookCounter = 0;
         let eventSource = null;
+        let autoRefreshInterval = null;
+        let allLogs = [];
+        let currentLogFilter = 'all';
+        
+        // Reload server configuration
+        async function reloadServerConfig() {
+            try {
+                const response = await fetch('/api/reload-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('✅ Configuração recarregada no servidor!', 'success');
+                    console.log('Reloaded config:', data.config);
+                } else {
+                    showToast(`❌ Erro: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showToast(`❌ Erro: ${error.message}`, 'error');
+            }
+        }
+        
+        // Fetch and display server info (uptime)
+        async function fetchServerInfo() {
+            try {
+                const response = await fetch('/api/server-info');
+                const data = await response.json();
+                
+                if (data.success && data.info) {
+                    document.getElementById('serverUptime').textContent = `⏱️ ${data.info.uptime.formatted}`;
+                }
+            } catch (error) {
+                console.log('Failed to fetch server info:', error.message);
+            }
+        }
+        
+        // Auto-refresh toggle
+        function toggleAutoRefresh() {
+            const checkbox = document.getElementById('autoRefresh');
+            if (checkbox.checked) {
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh();
+            }
+        }
+        
+        function startAutoRefresh() {
+            if (autoRefreshInterval) return;
+            autoRefreshInterval = setInterval(() => {
+                checkBotStatus(true); // silent mode
+                fetchServerInfo(); // update uptime
+            }, 10000); // every 10 seconds
+            console.log('Auto-refresh started');
+        }
+        
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                console.log('Auto-refresh stopped');
+            }
+        }
+        
+        // Clear logs
+        function clearLogs() {
+            allLogs = [];
+            const container = document.getElementById('logsContainer');
+            container.innerHTML = '';
+            updateLogCount();
+            showToast('Logs limpos', 'info');
+        }
+        
+        // Download logs
+        function downloadLogs() {
+            const content = allLogs.map(log => 
+                `[${log.timestamp}] [${log.level.toUpperCase()}] ${log.message}`
+            ).join('\n');
+            
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `discord-relay-logs-${new Date().toISOString().slice(0,10)}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Logs baixados', 'success');
+        }
+        
+        // Filter logs
+        function filterLogs() {
+            currentLogFilter = document.getElementById('logLevelFilter').value;
+            displayLogs(allLogs);
+        }
+        
+        // Update log count
+        function updateLogCount() {
+            document.getElementById('logCount').textContent = allLogs.length;
+        }
         
         // Toast notification system
         function showToast(message, type = 'success') {
@@ -1267,7 +1406,7 @@ return $json;</pre>
         
         // Force reconnect to Discord
         async function forceReconnect() {
-            showToast('🔄 Forçando reconexão ao Discord...', 'info');
+            showToast('🔄 Forçando reconexão ao Discord... Aguarde...', 'info');
             
             try {
                 const response = await fetch('/api/reconnect', {
@@ -1278,8 +1417,12 @@ return $json;</pre>
                 const data = await response.json();
                 
                 if (data.success) {
-                    showToast('✅ Reconexão bem-sucedida!', 'success');
-                    setTimeout(checkBotStatus, 2000);
+                    showToast('✅ Reconexão iniciada! Verificando status em 5 segundos...', 'success');
+                    // Wait longer before checking status to allow Discord connection to stabilize
+                    setTimeout(() => {
+                        checkBotStatus();
+                        showToast('🔍 Status verificado!', 'info');
+                    }, 5000);
                 } else {
                     showToast(`❌ Falha ao reconectar: ${data.error}`, 'error');
                 }
@@ -1319,18 +1462,45 @@ return $json;</pre>
         }
         
         function displayLogs(logs) {
+            allLogs = logs;
             const container = document.getElementById('logsContainer');
             container.innerHTML = '';
             
-            logs.forEach(log => {
-                addLogEntry(log);
+            // Filter logs based on current filter
+            const levelOrder = { debug: 0, info: 1, warn: 2, error: 3 };
+            const filteredLogs = logs.filter(log => {
+                if (currentLogFilter === 'all') return true;
+                if (currentLogFilter === 'debug') return log.level === 'debug';
+                return levelOrder[log.level] >= levelOrder[currentLogFilter];
             });
+            
+            filteredLogs.forEach(log => {
+                renderLogEntry(log);
+            });
+            
+            updateLogCount();
         }
         
         function addLogEntry(log) {
+            allLogs.push(log);
+            if (allLogs.length > 100) allLogs.shift();
+            
+            // Check if log passes current filter
+            const levelOrder = { debug: 0, info: 1, warn: 2, error: 3 };
+            if (currentLogFilter !== 'all') {
+                if (currentLogFilter === 'debug' && log.level !== 'debug') return;
+                if (levelOrder[log.level] < levelOrder[currentLogFilter]) return;
+            }
+            
+            renderLogEntry(log);
+            updateLogCount();
+        }
+        
+        function renderLogEntry(log) {
             const container = document.getElementById('logsContainer');
             const entry = document.createElement('div');
             entry.className = 'log-entry';
+            entry.dataset.level = log.level;
 
             // Create elements safely to prevent XSS
             const timeSpan = document.createElement('span');
@@ -1356,8 +1526,8 @@ return $json;</pre>
         // Monitor webhook URL changes
         document.getElementById('N8N_WEBHOOK_URL').addEventListener('input', updateWebhookCount);
         
-        // Check bot status
-        async function checkBotStatus() {
+        // Check bot status (silent mode for auto-refresh)
+        async function checkBotStatus(silent = false) {
             try {
                 const response = await fetch('/api/bot-status');
                 const data = await response.json();
@@ -1368,9 +1538,13 @@ return $json;</pre>
                     const statusHelpEl = document.getElementById('botStatusHelp');
                     const intentsEl = document.getElementById('intentsStatus');
                     const intentsHelpEl = document.getElementById('intentsHelp');
+                    const connectionDot = document.getElementById('connectionDot');
+                    const connectionText = document.getElementById('connectionText');
+                    const pingDisplay = document.getElementById('pingDisplay');
+                    const howToCallEl = document.getElementById('howToCall');
                     
-                    // Show token analysis if available
-                    if (status.tokenAnalysis) {
+                    // Show token analysis if available (only if not silent)
+                    if (!silent && status.tokenAnalysis) {
                         const analysis = status.tokenAnalysis;
                         let tokenIssues = [];
                         
@@ -1396,10 +1570,46 @@ return $json;</pre>
                         }
                     }
                     
-                    if (status.connected) {
-                        statusEl.textContent = `✅ Conectado (${status.guilds} servidores)`;
+                    // WebSocket status codes
+                    const wsStatusNames = {
+                        0: 'Ready',
+                        1: 'Connecting', 
+                        2: 'Reconnecting',
+                        3: 'Idle',
+                        4: 'Nearly',
+                        5: 'Disconnected',
+                        6: 'WaitingForGuilds',
+                        7: 'Identifying',
+                        8: 'Resuming'
+                    };
+                    
+                    // Log status for debugging (only if not silent)
+                    if (!silent) {
+                        console.log('Bot Status:', status);
+                    }
+                    
+                    // Check if bot is connected - use botTag as additional check
+                    const isActuallyConnected = status.connected || (status.botTag && status.wsStatus === 0);
+                    
+                    // Update header connection indicator
+                    if (isActuallyConnected) {
+                        connectionDot.style.background = '#23A55A';
+                        connectionText.textContent = status.botTag || 'Conectado';
+                        pingDisplay.textContent = status.wsPing ? `(${status.wsPing}ms)` : '';
+                    } else if (status.wsStatus === 1 || status.wsStatus === 2 || status.wsStatus === 7 || status.wsStatus === 8) {
+                        connectionDot.style.background = '#F0B232';
+                        connectionText.textContent = 'Conectando...';
+                        pingDisplay.textContent = '';
+                    } else {
+                        connectionDot.style.background = '#F23F42';
+                        connectionText.textContent = 'Desconectado';
+                        pingDisplay.textContent = '';
+                    }
+                    
+                    if (isActuallyConnected) {
+                        statusEl.textContent = `✅ Conectado (${status.guilds} servidor${status.guilds !== 1 ? 'es' : ''})`;
                         statusEl.style.color = 'var(--success)';
-                        statusHelpEl.textContent = `Bot: ${status.botTag || 'N/A'}`;
+                        statusHelpEl.textContent = `${status.botTag || 'N/A'}`;
                         
                         // Show intent status
                         const intentStatus = [];
@@ -1408,37 +1618,49 @@ return $json;</pre>
                         if (status.hasMessageContent) intentStatus.push('MessageContent');
                         
                         if (intentStatus.length === 3) {
-                            intentsEl.textContent = '✅ Todos';
+                            intentsEl.textContent = '✅ OK';
                             intentsEl.style.color = 'var(--success)';
-                            intentsHelpEl.textContent = 'Intents configurados corretamente';
+                            intentsHelpEl.textContent = 'Todos configurados';
                         } else {
                             intentsEl.textContent = '⚠️ Parcial';
                             intentsEl.style.color = 'var(--warning)';
                             intentsHelpEl.textContent = `Faltando: ${['Guilds', 'GuildMessages', 'MessageContent'].filter(i => !intentStatus.includes(i)).join(', ')}`;
                         }
-                        
-                        if (intentStatus.length === 3) {
-                            // All good
-                        } else {
-                            showToast(`⚠️ Alguns intents podem estar faltando. Verifique no Developer Portal!`, 'warning');
-                        }
+                    } else if (status.botTag) {
+                        // Bot has a tag but isReady() returned false - might be in transition
+                        statusEl.textContent = `🔄 Conectando...`;
+                        statusEl.style.color = 'var(--warning)';
+                        statusHelpEl.textContent = `${status.botTag}`;
+                        intentsEl.textContent = '⏳';
+                        intentsHelpEl.textContent = 'Aguardando...';
                     } else {
                         statusEl.textContent = '❌ Desconectado';
                         statusEl.style.color = 'var(--error)';
-                        statusHelpEl.textContent = status.error || 'Verifique DISCORD_TOKEN';
+                        statusHelpEl.textContent = status.error || 'Verifique o token';
                         intentsEl.textContent = '-';
                         intentsHelpEl.textContent = 'Bot não conectado';
                         
-                        // Show detailed error if available
-                        if (status.error) {
+                        // Show detailed error if available (only if not silent)
+                        if (!silent && status.error) {
                             showToast(`❌ ${status.error}`, 'error');
-                        } else {
-                            showToast('Bot não está conectado. Verifique o DISCORD_TOKEN e os logs', 'error');
                         }
+                    }
+                    
+                    // Update "How to call" based on configured prefix
+                    const prefixInput = document.getElementById('BOT_PREFIX');
+                    if (prefixInput && prefixInput.value) {
+                        howToCallEl.textContent = `${prefixInput.value} ou @${status.botTag?.split('#')[0] || 'bot'}`;
                     }
                 }
             } catch (error) {
-                showToast('Erro ao verificar status: ' + error.message, 'error');
+                // Update connection indicator on error
+                document.getElementById('connectionDot').style.background = '#F23F42';
+                document.getElementById('connectionText').textContent = 'Erro';
+                document.getElementById('pingDisplay').textContent = '';
+                
+                if (!silent) {
+                    showToast('Erro ao verificar status: ' + error.message, 'error');
+                }
             }
         }
         
@@ -1501,9 +1723,22 @@ return $json;</pre>
             }
         }
         
+        // Update "How to call" when prefix changes
+        document.getElementById('BOT_PREFIX').addEventListener('input', function() {
+            const howToCallEl = document.getElementById('howToCall');
+            howToCallEl.textContent = `${this.value || '!bot'} ou @bot`;
+        });
+        
         // Load config and check status on page load
         loadConfig();
-        setTimeout(checkBotStatus, 1000); // Check status after 1 second
+        fetchServerInfo();
+        setTimeout(() => {
+            checkBotStatus();
+            // Start auto-refresh if checkbox is checked
+            if (document.getElementById('autoRefresh').checked) {
+                startAutoRefresh();
+            }
+        }, 1000);
     </script>
 </body>
 </html>

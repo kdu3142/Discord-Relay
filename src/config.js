@@ -192,6 +192,108 @@ const config = {
 // Validate on module load
 validateConfig();
 
+/**
+ * Reload configuration from config.env file
+ * This allows dynamic reloading without restarting the process
+ */
+export function reloadConfig() {
+  // Clear cached env vars that were loaded from config.env
+  const keysToReload = [
+    'DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'N8N_WEBHOOK_URL', 'N8N_WEBHOOKS',
+    'RELAY_SHARED_SECRET', 'BOT_PREFIX', 'ALLOWED_GUILD_IDS', 'LOG_LEVEL'
+  ];
+  
+  keysToReload.forEach(key => {
+    delete process.env[key];
+  });
+  
+  // Reload from file
+  const result = dotenv.config({ path: configEnvPath, override: true });
+  if (result.error) {
+    console.log(`[Config] ⚠️ Error reloading config.env: ${result.error.message}`);
+    return null;
+  }
+  
+  console.log('[Config] Reloaded config.env successfully');
+  
+  // Return new config values
+  return {
+    discord: {
+      token: cleanToken(process.env.DISCORD_TOKEN),
+      clientId: cleanToken(process.env.DISCORD_CLIENT_ID),
+    },
+    n8n: {
+      webhookUrl: (() => {
+        const rawUrl = process.env.N8N_WEBHOOK_URL;
+        if (!rawUrl) return null;
+        const trimmedUrl = rawUrl.trim();
+        if (trimmedUrl === '' || trimmedUrl === 'your_n8n_webhook_url_here') {
+          return null;
+        }
+        return trimmedUrl;
+      })(),
+      webhooks: parseWebhooks(process.env.N8N_WEBHOOKS),
+    },
+    relay: {
+      sharedSecret: process.env.RELAY_SHARED_SECRET || null,
+    },
+    bot: {
+      prefix: process.env.BOT_PREFIX || '!bot',
+      allowedGuildIds: process.env.ALLOWED_GUILD_IDS
+        ? process.env.ALLOWED_GUILD_IDS.split(',').map(id => id.trim()).filter(Boolean)
+        : null,
+    },
+    logging: {
+      level: process.env.LOG_LEVEL || 'info',
+    },
+  };
+}
+
+/**
+ * Export config file path for external use
+ */
+export const configPath = configEnvPath;
+
+/**
+ * Read config file content directly
+ */
+export async function readConfigFile() {
+  try {
+    const content = await fs.promises.readFile(configEnvPath, 'utf-8');
+    return content;
+  } catch (error) {
+    console.log(`[Config] Error reading config file: ${error.message}`);
+    return '';
+  }
+}
+
+/**
+ * Parse env file content into object
+ */
+export function parseEnv(content) {
+  const result = {};
+  const lines = content.split('\n');
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Skip comments and empty lines
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    
+    const match = trimmed.match(/^([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$/);
+    if (match) {
+      let value = match[2];
+      // Remove surrounding quotes if present
+      if ((value.startsWith('"') && value.endsWith('"')) || 
+          (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      result[match[1]] = value;
+    }
+  }
+  
+  return result;
+}
+
 // Log config loading (without sensitive data)
 if (process.env.DISCORD_TOKEN) {
   const rawToken = process.env.DISCORD_TOKEN;
@@ -220,3 +322,4 @@ if (process.env.DISCORD_TOKEN) {
 }
 
 export default config;
+export { cleanToken };

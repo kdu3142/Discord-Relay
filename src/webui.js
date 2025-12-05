@@ -7,6 +7,13 @@ import { EventEmitter } from 'events';
 import { testWebhook, sendToN8n } from './relay.js';
 import { formatMessageEvent } from './payload.js';
 import { isBotCalled } from './filters.js';
+import { 
+  configPath as configPathFromConfig, 
+  reloadConfig, 
+  readConfigFile, 
+  parseEnv,
+  cleanToken 
+} from './config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,8 +32,11 @@ const logEmitter = new EventEmitter();
 const recentLogs = [];
 const MAX_LOGS = 100;
 
-// Get the config.env file path (this is the main configuration file)
-const configPath = join(__dirname, '..', 'config.env');
+// Get the config.env file path (use from config module for consistency)
+const configPath = configPathFromConfig || join(__dirname, '..', 'config.env');
+
+// Export these functions for use in other modules
+export { readConfigFile, parseEnv };
 
 /**
  * Add log entry to recent logs
@@ -48,42 +58,7 @@ export function addLogEntry(level, message, data = {}) {
   logEmitter.emit('log', logEntry);
 }
 
-/**
- * Read current config.env file or return empty config
- */
-async function readConfigFile() {
-  try {
-    const content = await fs.readFile(configPath, 'utf-8');
-    return content;
-  } catch (error) {
-    // config.env doesn't exist, return empty
-    return '';
-  }
-}
-
-/**
- * Parse config.env file into object (ignores comments)
- */
-function parseEnv(content) {
-  const config = {};
-  const lines = content.split('\n');
-  
-  for (const line of lines) {
-    const trimmed = line.trim();
-    // Skip comments and empty lines
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    
-    const match = trimmed.match(/^([^=]+)=(.*)$/);
-    if (match) {
-      const key = match[1].trim();
-      const value = match[2].trim();
-      // Remove quotes if present
-      config[key] = value.replace(/^["']|["']$/g, '');
-    }
-  }
-  
-  return config;
-}
+// Note: readConfigFile and parseEnv are imported from config.js and re-exported above
 
 /**
  * Convert config object back to config.env format
@@ -504,6 +479,12 @@ app.get('/api/bot-status', async (req, res) => {
     
     const { GatewayIntentBits } = await import('discord.js');
     
+    // Debug: log client state
+    console.log('[Status Check] isReady:', discordClient.isReady());
+    console.log('[Status Check] ws.status:', discordClient.ws.status);
+    console.log('[Status Check] user:', discordClient.user?.tag || 'null');
+    console.log('[Status Check] guilds:', discordClient.guilds?.cache.size || 0);
+    
     const status = {
       connected: discordClient.isReady(),
       botTag: discordClient.user?.tag || null,
@@ -513,6 +494,8 @@ app.get('/api/bot-status', async (req, res) => {
       hasGuilds: discordClient.options.intents?.has(GatewayIntentBits.Guilds) || false,
       hasGuildMessages: discordClient.options.intents?.has(GatewayIntentBits.GuildMessages) || false,
       hasMessageContent: discordClient.options.intents?.has(GatewayIntentBits.MessageContent) || false,
+      wsStatus: discordClient.ws.status,
+      wsPing: discordClient.ws.ping,
       tokenAnalysis,
     };
 
@@ -654,20 +637,46 @@ app.post('/api/reconnect', async (req, res) => {
     
     addLogEntry('info', '🔄 Forçando reconexão ao Discord...');
     
-    // Get token from config
-    const configContent = await readConfigFile();
-    const config = parseEnv(configContent);
-    const token = config.DISCORD_TOKEN?.trim();
+    // Reload config from file to get latest token
+    console.log('[Reconnect] Reloading config from file...');
+    addLogEntry('info', '📄 Recarregando configuração do arquivo...');
     
-    if (!token || token === 'your_discord_bot_token_here') {
+    const newConfig = reloadConfig();
+    
+    // Get token from reloaded config or read directly from file
+    let cleanedToken;
+    if (newConfig && newConfig.discord.token) {
+      cleanedToken = newConfig.discord.token;
+      console.log('[Reconnect] Using token from reloaded config');
+    } else {
+      // Fallback: read directly from file
+      const configContent = await readConfigFile();
+      const config = parseEnv(configContent);
+      const token = config.DISCORD_TOKEN?.trim();
+      
+      if (!token || token === 'your_discord_bot_token_here') {
+        return res.status(400).json({
+          success: false,
+          error: 'Token not configured',
+        });
+      }
+      
+      cleanedToken = cleanToken(token);
+      console.log('[Reconnect] Using token from direct file read');
+    }
+    
+    if (!cleanedToken) {
       return res.status(400).json({
         success: false,
-        error: 'Token not configured',
+        error: 'Token not configured or invalid',
       });
     }
     
-    // Clean token
-    const cleanedToken = token.replace(/[\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF]/g, '').trim();
+    const tokenMasked = cleanedToken.length > 14 
+      ? `${cleanedToken.substring(0, 10)}...${cleanedToken.substring(cleanedToken.length - 4)}`
+      : '***';
+    
+    addLogEntry('info', `🔑 Token carregado: ${tokenMasked} (${cleanedToken.length} chars)`);
     
     // Log before reconnect
     console.log('[Reconnect] Destroying current connection...');
@@ -690,6 +699,9 @@ app.post('/api/reconnect', async (req, res) => {
       
       console.log('[Reconnect] Login successful!');
       addLogEntry('info', '✅ Reconexão bem-sucedida!');
+      
+      // Wait a bit for the ready event
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       res.json({
         success: true,
@@ -721,6 +733,88 @@ app.post('/api/reconnect', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// API: Reload configuration from file (without reconnecting)
+app.post('/api/reload-config', async (req, res) => {
+  try {
+    addLogEntry('info', '📄 Recarregando configuração do arquivo...');
+    
+    const newConfig = reloadConfig();
+    
+    if (newConfig) {
+      addLogEntry('info', '✅ Configuração recarregada com sucesso!');
+      
+      // Return summary of what was loaded (without sensitive data)
+      res.json({
+        success: true,
+        message: 'Configuration reloaded',
+        config: {
+          hasToken: !!newConfig.discord.token,
+          tokenLength: newConfig.discord.token?.length || 0,
+          hasClientId: !!newConfig.discord.clientId,
+          hasDefaultWebhook: !!newConfig.n8n.webhookUrl,
+          webhooksCount: Object.keys(newConfig.n8n.webhooks || {}).length,
+          hasSharedSecret: !!newConfig.relay.sharedSecret,
+          botPrefix: newConfig.bot.prefix,
+          allowedGuilds: newConfig.bot.allowedGuildIds?.length || 'all',
+          logLevel: newConfig.logging.level,
+        },
+      });
+    } else {
+      res.json({
+        success: false,
+        error: 'Failed to reload configuration',
+      });
+    }
+  } catch (error) {
+    addLogEntry('error', `Erro ao recarregar config: ${error.message}`);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API: Get server info (uptime, memory, etc.)
+app.get('/api/server-info', (req, res) => {
+  const uptime = process.uptime();
+  const memory = process.memoryUsage();
+  
+  res.json({
+    success: true,
+    info: {
+      uptime: {
+        seconds: Math.floor(uptime),
+        formatted: formatUptime(uptime),
+      },
+      memory: {
+        rss: formatBytes(memory.rss),
+        heapUsed: formatBytes(memory.heapUsed),
+        heapTotal: formatBytes(memory.heapTotal),
+      },
+      node: process.version,
+      platform: process.platform,
+    },
+  });
+});
+
+function formatUptime(seconds) {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  parts.push(`${secs}s`);
+  
+  return parts.join(' ');
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
 
 const PORT = process.env.WEBUI_PORT || 3001;
 
