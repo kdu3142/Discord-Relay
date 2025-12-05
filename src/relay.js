@@ -17,12 +17,13 @@ function generateSignature(payload, secret) {
 }
 
 /**
- * Sends payload to n8n webhook with retry logic
+ * Sends payload to a specific n8n webhook URL with retry logic
+ * @param {string} webhookUrl - The webhook URL to send to
  * @param {Object} payload - The normalized payload to send
+ * @param {string} webhookName - Optional name for logging
  * @returns {Promise<{ success: boolean, status?: number, error?: string }>}
  */
-export async function sendToN8n(payload) {
-  const webhookUrl = config.n8n.webhookUrl;
+async function sendToWebhook(webhookUrl, payload, webhookName = 'n8n') {
   const sharedSecret = config.relay.sharedSecret;
   const timestamp = new Date().toISOString();
 
@@ -44,7 +45,7 @@ export async function sendToN8n(payload) {
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      logger.debug('Sending payload to n8n', {
+      logger.debug(`Sending payload to ${webhookName}`, {
         attempt: attempt + 1,
         maxRetries: maxRetries + 1,
         webhookUrl: webhookUrl.replace(/\/[^\/]+$/, '/***'), // Mask webhook path
@@ -57,14 +58,14 @@ export async function sendToN8n(payload) {
       });
 
       if (response.status >= 200 && response.status < 300) {
-        logger.info('Successfully sent payload to n8n', {
+        logger.info(`Successfully sent payload to ${webhookName}`, {
           status: response.status,
           attempt: attempt + 1,
         });
         return { success: true, status: response.status };
       } else {
         // 4xx errors are not retried (client errors)
-        logger.warn('n8n webhook returned non-success status', {
+        logger.warn(`${webhookName} webhook returned non-success status`, {
           status: response.status,
           statusText: response.statusText,
           data: response.data,
@@ -84,7 +85,7 @@ export async function sendToN8n(payload) {
         error.response?.status >= 500;
 
       if (isLastAttempt || !isNetworkError) {
-        logger.error('Failed to send payload to n8n', {
+        logger.error(`Failed to send payload to ${webhookName}`, {
           error: error.message,
           code: error.code,
           status: error.response?.status,
@@ -100,7 +101,7 @@ export async function sendToN8n(payload) {
 
       // Calculate exponential backoff delay
       const delay = baseDelay * Math.pow(2, attempt);
-      logger.warn('Retrying n8n webhook request', {
+      logger.warn(`Retrying ${webhookName} webhook request`, {
         attempt: attempt + 1,
         maxRetries: maxRetries + 1,
         delayMs: delay,
@@ -112,9 +113,98 @@ export async function sendToN8n(payload) {
     }
   }
 
-  // This should never be reached, but TypeScript/static analysis might want it
   return {
     success: false,
     error: 'Max retries exceeded',
   };
+}
+
+/**
+ * Sends payload to all configured n8n webhooks
+ * @param {Object} payload - The normalized payload to send
+ * @returns {Promise<Array<{ webhook: string, success: boolean, status?: number, error?: string }>>}
+ */
+export async function sendToN8n(payload) {
+  const results = [];
+  
+  // Send to default webhook if configured
+  if (config.n8n.webhookUrl) {
+    const result = await sendToWebhook(config.n8n.webhookUrl, payload, 'default');
+    results.push({
+      webhook: 'default',
+      url: config.n8n.webhookUrl,
+      ...result,
+    });
+  }
+
+  // Send to all additional webhooks
+  for (const [name, url] of Object.entries(config.n8n.webhooks)) {
+    const result = await sendToWebhook(url, payload, name);
+    results.push({
+      webhook: name,
+      url: url,
+      ...result,
+    });
+  }
+
+  return results;
+}
+
+/**
+ * Test a webhook URL by sending a test payload
+ * @param {string} webhookUrl - The webhook URL to test
+ * @param {string} sharedSecret - Optional shared secret for HMAC
+ * @returns {Promise<{ success: boolean, status?: number, error?: string, responseTime?: number }>}
+ */
+export async function testWebhook(webhookUrl, sharedSecret = null) {
+  const testPayload = {
+    event_type: 'test',
+    relay: {
+      version: 1,
+      source: 'discord',
+      bot_called: false,
+      matched_rule: 'test',
+    },
+    timestamp: new Date().toISOString(),
+    message: 'This is a test payload from Discord Relay Bot',
+  };
+
+  const timestamp = new Date().toISOString();
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Relay-Timestamp': timestamp,
+  };
+
+  if (sharedSecret) {
+    const signature = generateSignature(testPayload, sharedSecret);
+    headers['X-Relay-Signature'] = signature;
+  }
+
+  const startTime = Date.now();
+
+  try {
+    const response = await axios.post(webhookUrl, testPayload, {
+      headers,
+      timeout: 10000,
+      validateStatus: () => true, // Accept all status codes for testing
+    });
+
+    const responseTime = Date.now() - startTime;
+
+    return {
+      success: response.status >= 200 && response.status < 300,
+      status: response.status,
+      responseTime,
+      data: response.data,
+    };
+  } catch (error) {
+    const responseTime = Date.now() - startTime;
+    return {
+      success: false,
+      error: error.message || 'Unknown error',
+      code: error.code,
+      status: error.response?.status,
+      responseTime,
+    };
+  }
 }

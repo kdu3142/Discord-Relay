@@ -4,7 +4,7 @@ import logger from './logger.js';
 import { isBotCalled, isGuildAllowed } from './filters.js';
 import { formatMessageEvent } from './payload.js';
 import { sendToN8n } from './relay.js';
-import { startWebUI as startConfigWebUI } from './webui.js';
+import { startWebUI as startConfigWebUI, addLogEntry } from './webui.js';
 
 // Create Discord client with required intents
 const client = new Client({
@@ -17,11 +17,13 @@ const client = new Client({
 
 // Client ready event
 client.once(Events.ClientReady, (readyClient) => {
-  logger.info('Discord bot is ready!', {
+  const logData = {
     botTag: readyClient.user.tag,
     botId: readyClient.user.id,
     guilds: readyClient.guilds.cache.size,
-  });
+  };
+  logger.info('Discord bot is ready!', logData);
+  addLogEntry('info', `Bot conectado: ${readyClient.user.tag} (${readyClient.guilds.cache.size} servidores)`, logData);
 });
 
 // Message create event handler
@@ -63,15 +65,29 @@ client.on(Events.MessageCreate, async (message) => {
     // Format the payload
     const payload = formatMessageEvent(message, 'message_create', rule);
 
-    // Send to n8n
-    const result = await sendToN8n(payload);
+    // Send to all configured n8n webhooks
+    const results = await sendToN8n(payload);
 
-    if (!result.success) {
-      logger.error('Failed to relay message to n8n', {
-        messageId: message.id,
-        error: result.error,
-        status: result.status,
-      });
+    // Log results for each webhook
+    for (const result of results) {
+      if (result.success) {
+        const logData = {
+          messageId: message.id,
+          webhook: result.webhook,
+          status: result.status,
+        };
+        logger.info(`Successfully relayed to ${result.webhook} webhook`, logData);
+        addLogEntry('info', `✅ Enviado para ${result.webhook} (${result.status})`, logData);
+      } else {
+        const logData = {
+          messageId: message.id,
+          webhook: result.webhook,
+          error: result.error,
+          status: result.status,
+        };
+        logger.error(`Failed to relay to ${result.webhook} webhook`, logData);
+        addLogEntry('error', `❌ Falha ao enviar para ${result.webhook}: ${result.error}`, logData);
+      }
     }
   } catch (error) {
     logger.error('Error processing message', {
