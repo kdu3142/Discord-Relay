@@ -481,7 +481,13 @@
                 <div class="icon">✅</div>
                 <h3>Status do Bot</h3>
                 <div class="value" id="botStatus">Verificando...</div>
-                <div class="help-text">Estado da conexão Discord</div>
+                <div class="help-text" id="botStatusHelp">Estado da conexão Discord</div>
+            </div>
+            <div class="info-card">
+                <div class="icon">🎯</div>
+                <h3>Intents Configurados</h3>
+                <div class="value" id="intentsStatus">-</div>
+                <div class="help-text" id="intentsHelp">Verifique no Developer Portal</div>
             </div>
         </div>
         
@@ -552,6 +558,25 @@
             </div>
             
             <div class="section">
+                <div class="section-title">🧪 Teste de Integração Discord</div>
+                <div class="help-text" style="margin-bottom: 15px;">
+                    Teste o fluxo completo: simula uma mensagem do Discord e envia para o n8n
+                </div>
+                
+                <div class="form-group">
+                    <label for="testDiscordMessage">Mensagem de Teste</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="testDiscordMessage" placeholder="!bot teste" value="">
+                        <button type="button" class="btn-test" onclick="testDiscordIntegration()">🧪 Testar Integração</button>
+                    </div>
+                    <div class="help-text">
+                        Simula uma mensagem do Discord. Use o prefixo configurado ou mencione o bot.
+                    </div>
+                    <div id="testDiscordResult"></div>
+                </div>
+            </div>
+            
+            <div class="section">
                 <div class="section-title">⚙️ Comportamento do Bot</div>
                 
                 <div class="form-group">
@@ -596,6 +621,7 @@
             <div class="button-group">
                 <button type="button" class="btn-secondary" onclick="loadConfig()">🔄 Recarregar</button>
                 <button type="button" class="btn-secondary" onclick="validateConfig()">✅ Validar</button>
+                <button type="button" class="btn-secondary" onclick="checkBotStatus()">🔍 Verificar Status</button>
                 <button type="submit" class="btn-primary">💾 Salvar Configuração</button>
             </div>
         </form>
@@ -677,14 +703,49 @@
   }
 }</pre>
                 
-                <h2>🧪 Testando Webhooks</h2>
-                <p>Use o botão "Testar" ao lado de cada webhook para verificar se está funcionando:</p>
+                <h2>🧪 Testando a Integração Completa</h2>
+                <p>Há duas formas de testar:</p>
+                
+                <h3>1. Teste via Web UI (Recomendado para debug)</h3>
+                <p>Na aba Configuração, use o botão "🧪 Testar Integração" para simular uma mensagem do Discord:</p>
+                <ul style="margin: 15px 0; padding-left: 25px;">
+                    <li>Simula uma mensagem como se viesse do Discord</li>
+                    <li>Testa o filtro de prefixo/menção</li>
+                    <li>Envia o payload completo para o n8n</li>
+                    <li>Mostra resultados detalhados</li>
+                </ul>
+                
+                <h3>2. Teste Real no Discord</h3>
+                <p>No seu servidor Discord:</p>
+                <ol style="margin: 15px 0; padding-left: 25px;">
+                    <li>Certifique-se de que o bot está no servidor</li>
+                    <li>Digite: <code>!bot teste</code> (ou seu prefixo configurado)</li>
+                    <li>Ou mencione o bot: <code>@SeuBot teste</code></li>
+                    <li>Verifique os logs na aba "Logs em Tempo Real"</li>
+                    <li>Verifique se o n8n recebeu o webhook</li>
+                </ol>
+                
+                <h3>3. Teste de Webhook Individual</h3>
+                <p>Use o botão "Testar" ao lado de cada webhook:</p>
                 <ul style="margin: 15px 0; padding-left: 25px;">
                     <li>O bot envia um payload de teste para o webhook</li>
                     <li>Verifica a resposta e mostra o tempo de resposta</li>
                     <li>Certifique-se de que o webhook no n8n está configurado como <strong>POST</strong></li>
                     <li>No n8n, clique em "Testar" no Webhook node e mantenha aberto</li>
                 </ul>
+                
+                <h2>🔍 Verificando Intents no Discord Developer Portal</h2>
+                <p><strong>OBRIGATÓRIO:</strong> Você DEVE habilitar os intents no Developer Portal:</p>
+                <ol style="margin: 15px 0; padding-left: 25px;">
+                    <li>Acesse <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer">Discord Developer Portal</a></li>
+                    <li>Selecione seu bot</li>
+                    <li>Vá em <strong>Bot</strong> → <strong>Privileged Gateway Intents</strong></li>
+                    <li>Habilite: <strong>✅ MESSAGE CONTENT INTENT</strong> (OBRIGATÓRIO)</li>
+                    <li>Opcional: GUILD MEMBERS, PRESENCE INTENT (se necessário)</li>
+                </ol>
+                <p style="background: #fff3cd; padding: 10px; border-radius: 4px; margin: 15px 0;">
+                    <strong>⚠️ IMPORTANTE:</strong> Sem o <strong>MESSAGE CONTENT INTENT</strong> habilitado, o bot NÃO receberá o conteúdo das mensagens, apenas eventos vazios!
+                </p>
                 
                 <h2>⚙️ Configuração no n8n</h2>
                 <ol style="margin: 15px 0; padding-left: 25px;">
@@ -712,6 +773,61 @@ if (receivedSignature !== expectedSignature) {
 }
 
 return $json;</pre>
+                
+                <h2>🐛 Troubleshooting: Bot não responde no Discord</h2>
+                <p>Se o bot não está respondendo quando você chama no Discord:</p>
+                
+                <h3>1. Verifique os Intents no Developer Portal</h3>
+                <ol style="margin: 15px 0; padding-left: 25px;">
+                    <li>Acesse <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer">Discord Developer Portal</a></li>
+                    <li>Selecione seu bot</li>
+                    <li>Vá em <strong>Bot</strong> → Role até <strong>Privileged Gateway Intents</strong></li>
+                    <li>Habilite: <strong>✅ MESSAGE CONTENT INTENT</strong></li>
+                    <li>Salve as alterações</li>
+                    <li><strong>Reinicie o bot</strong> (os intents só são aplicados na próxima conexão)</li>
+                </ol>
+                
+                <h3>2. Verifique se o bot está no servidor</h3>
+                <ul style="margin: 15px 0; padding-left: 25px;">
+                    <li>O bot precisa estar adicionado ao servidor Discord</li>
+                    <li>Use o OAuth2 URL Generator no Developer Portal para adicionar o bot</li>
+                    <li>Verifique as permissões: Read Messages, Send Messages</li>
+                </ul>
+                
+                <h3>3. Verifique os logs</h3>
+                <ul style="margin: 15px 0; padding-left: 25px;">
+                    <li>Vá na aba <strong>"Logs em Tempo Real"</strong></li>
+                    <li>Envie uma mensagem no Discord (ex: <code>!bot teste</code>)</li>
+                    <li>Você deve ver logs como:
+                        <ul>
+                            <li><code>[DEBUG] Message received</code> - Mensagem chegou</li>
+                            <li><code>[DEBUG] Bot was not called</code> - Bot não foi acionado (verifique prefixo)</li>
+                            <li><code>[INFO] Bot was called</code> - Bot foi acionado corretamente</li>
+                            <li><code>[INFO] ✅ Enviado para webhook</code> - Payload enviado</li>
+                        </ul>
+                    </li>
+                </ul>
+                
+                <h3>4. Teste via Web UI</h3>
+                <ul style="margin: 15px 0; padding-left: 25px;">
+                    <li>Use o botão <strong>"🧪 Testar Integração"</strong> na aba Configuração</li>
+                    <li>Isso simula uma mensagem do Discord e testa o fluxo completo</li>
+                    <li>Se funcionar aqui mas não no Discord real, o problema é nos intents</li>
+                </ul>
+                
+                <h3>5. Verifique o prefixo</h3>
+                <ul style="margin: 15px 0; padding-left: 25px;">
+                    <li>O prefixo padrão é <code>!bot</code></li>
+                    <li>Você pode mudar em <code>BOT_PREFIX</code> no config.env</li>
+                    <li>O bot também responde a menções: <code>@SeuBot mensagem</code></li>
+                </ul>
+                
+                <h3>6. Ative logs de debug</h3>
+                <ul style="margin: 15px 0; padding-left: 25px;">
+                    <li>Configure <code>LOG_LEVEL=debug</code> no config.env</li>
+                    <li>Reinicie o bot</li>
+                    <li>Você verá TODAS as mensagens recebidas, não apenas as que acionam o bot</li>
+                </ul>
             </div>
         </div>
     </div>
@@ -1069,8 +1185,121 @@ return $json;</pre>
         // Monitor webhook URL changes
         document.getElementById('N8N_WEBHOOK_URL').addEventListener('input', updateWebhookCount);
         
-        // Load config on page load
+        // Check bot status
+        async function checkBotStatus() {
+            try {
+                const response = await fetch('/api/bot-status');
+                const data = await response.json();
+                
+                if (data.success && data.status) {
+                    const status = data.status;
+                    const statusEl = document.getElementById('botStatus');
+                    const statusHelpEl = document.getElementById('botStatusHelp');
+                    const intentsEl = document.getElementById('intentsStatus');
+                    const intentsHelpEl = document.getElementById('intentsHelp');
+                    
+                    if (status.connected) {
+                        statusEl.textContent = `✅ Conectado (${status.guilds} servidores)`;
+                        statusEl.style.color = 'var(--success)';
+                        statusHelpEl.textContent = `Bot: ${status.botTag || 'N/A'}`;
+                        
+                        // Show intent status
+                        const intentStatus = [];
+                        if (status.hasGuilds) intentStatus.push('Guilds');
+                        if (status.hasGuildMessages) intentStatus.push('GuildMessages');
+                        if (status.hasMessageContent) intentStatus.push('MessageContent');
+                        
+                        if (intentStatus.length === 3) {
+                            intentsEl.textContent = '✅ Todos';
+                            intentsEl.style.color = 'var(--success)';
+                            intentsHelpEl.textContent = 'Intents configurados corretamente';
+                        } else {
+                            intentsEl.textContent = '⚠️ Parcial';
+                            intentsEl.style.color = 'var(--warning)';
+                            intentsHelpEl.textContent = `Faltando: ${['Guilds', 'GuildMessages', 'MessageContent'].filter(i => !intentStatus.includes(i)).join(', ')}`;
+                        }
+                        
+                        if (intentStatus.length === 3) {
+                            // All good
+                        } else {
+                            showToast(`⚠️ Alguns intents podem estar faltando. Verifique no Developer Portal!`, 'warning');
+                        }
+                    } else {
+                        statusEl.textContent = '❌ Desconectado';
+                        statusEl.style.color = 'var(--error)';
+                        statusHelpEl.textContent = 'Verifique DISCORD_TOKEN';
+                        intentsEl.textContent = '-';
+                        intentsHelpEl.textContent = 'Bot não conectado';
+                        showToast('Bot não está conectado. Verifique o DISCORD_TOKEN', 'error');
+                    }
+                }
+            } catch (error) {
+                showToast('Erro ao verificar status: ' + error.message, 'error');
+            }
+        }
+        
+        // Test Discord integration
+        async function testDiscordIntegration() {
+            const testMsg = document.getElementById('testDiscordMessage').value.trim();
+            const resultDiv = document.getElementById('testDiscordResult');
+            
+            if (!testMsg) {
+                const prefix = document.getElementById('BOT_PREFIX').value || '!bot';
+                document.getElementById('testDiscordMessage').value = `${prefix} teste`;
+                return testDiscordIntegration();
+            }
+            
+            try {
+                resultDiv.textContent = '';
+                const loadingDiv = document.createElement('div');
+                loadingDiv.className = 'test-result';
+                loadingDiv.textContent = 'Testando integração Discord → n8n...';
+                resultDiv.appendChild(loadingDiv);
+                
+                const response = await fetch('/api/test-discord', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ testMessage: testMsg })
+                });
+                
+                const data = await response.json();
+                
+                resultDiv.textContent = '';
+                const resultDivContent = document.createElement('div');
+                
+                if (data.success) {
+                    resultDivContent.className = 'test-result success';
+                    let msg = `✅ Integração funcionando! Enviado para ${data.details.webhooksSuccess} webhook(s)`;
+                    if (data.details.webhooksFailed > 0) {
+                        msg += ` (${data.details.webhooksFailed} falhou)`;
+                    }
+                    resultDivContent.textContent = msg;
+                    showToast('✅ Teste de integração Discord bem-sucedido!', 'success');
+                } else {
+                    resultDivContent.className = 'test-result error';
+                    let msg = `❌ ${data.error}`;
+                    if (data.details) {
+                        if (data.details.suggestion) {
+                            msg += `\n💡 ${data.details.suggestion}`;
+                        }
+                    }
+                    resultDivContent.textContent = msg;
+                    showToast('❌ Teste falhou: ' + data.error, 'error');
+                }
+                resultDiv.appendChild(resultDivContent);
+            } catch (error) {
+                resultDiv.textContent = '';
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'test-result error';
+                errorDiv.textContent = `❌ Erro: ${error.message}`;
+                resultDiv.appendChild(errorDiv);
+                showToast('Erro ao testar: ' + error.message, 'error');
+            }
+        }
+        
+        // Load config and check status on page load
         loadConfig();
+        setTimeout(checkBotStatus, 1000); // Check status after 1 second
     </script>
 </body>
 </html>

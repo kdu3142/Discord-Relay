@@ -4,7 +4,7 @@ import logger from './logger.js';
 import { isBotCalled, isGuildAllowed } from './filters.js';
 import { formatMessageEvent } from './payload.js';
 import { sendToN8n } from './relay.js';
-import { startWebUI as startConfigWebUI, addLogEntry } from './webui.js';
+import { startWebUI as startConfigWebUI, addLogEntry, setDiscordClient } from './webui.js';
 
 // Create Discord client with required intents
 const client = new Client({
@@ -15,6 +15,9 @@ const client = new Client({
   ],
 });
 
+// Export client for testing purposes
+export { client };
+
 // Client ready event
 client.once(Events.ClientReady, (readyClient) => {
   const logData = {
@@ -24,13 +27,47 @@ client.once(Events.ClientReady, (readyClient) => {
   };
   logger.info('Discord bot is ready!', logData);
   addLogEntry('info', `Bot conectado: ${readyClient.user.tag} (${readyClient.guilds.cache.size} servidores)`, logData);
+  
+  // Log intents for debugging
+  const intents = client.options.intents;
+  logger.info('Bot intents configured', {
+    intents: intents.toArray(),
+    hasGuilds: intents.has(GatewayIntentBits.Guilds),
+    hasGuildMessages: intents.has(GatewayIntentBits.GuildMessages),
+    hasMessageContent: intents.has(GatewayIntentBits.MessageContent),
+  });
+  addLogEntry('info', `Intents configurados: ${intents.toArray().join(', ')}`, {
+    intents: intents.toArray(),
+  });
+  
+  // Log guilds for debugging
+  const guildList = readyClient.guilds.cache.map(g => ({ id: g.id, name: g.name }));
+  logger.info('Bot is in these servers', { guilds: guildList });
 });
 
 // Message create event handler
 client.on(Events.MessageCreate, async (message) => {
   try {
+    // Log all messages for debugging (can be filtered by log level)
+    logger.debug('Message received', {
+      messageId: message.id,
+      authorId: message.author.id,
+      authorBot: message.author.bot,
+      authorUsername: message.author.username,
+      channelId: message.channel.id,
+      channelName: message.channel.name,
+      guildId: message.guild?.id,
+      guildName: message.guild?.name,
+      content: message.content.substring(0, 100), // First 100 chars for debugging
+      hasMentions: message.mentions.users.size > 0,
+    });
+
     // Skip if not in a guild (DMs not supported in this version)
     if (!message.guild) {
+      logger.debug('Message is DM, skipping (DMs not supported)', {
+        messageId: message.id,
+        authorId: message.author.id,
+      });
       return;
     }
 
@@ -39,6 +76,7 @@ client.on(Events.MessageCreate, async (message) => {
       logger.debug('Message from disallowed guild, skipping', {
         guildId: message.guild.id,
         guildName: message.guild.name,
+        messageId: message.id,
       });
       return;
     }
@@ -47,8 +85,20 @@ client.on(Events.MessageCreate, async (message) => {
     const { called, rule, cleanContent } = isBotCalled(message, client);
 
     if (!called) {
+      logger.debug('Bot was not called in message, ignoring', {
+        messageId: message.id,
+        content: message.content.substring(0, 50),
+        prefix: config.bot.prefix,
+        botMentioned: message.mentions.has(client.user),
+      });
       return; // Bot was not called, ignore message
     }
+
+    logger.info('Bot was called - processing message', {
+      messageId: message.id,
+      rule,
+      cleanContent,
+    });
 
     logger.info('Bot was called', {
       messageId: message.id,
@@ -154,6 +204,8 @@ const enableWebUI = process.env.START_WEBUI === 'true' || process.env.START_WEBU
 
 if (enableWebUI) {
   logger.info('Starting configuration Web UI...');
+  // Pass client reference to web UI for testing
+  setDiscordClient(client);
   startConfigWebUI();
 }
 

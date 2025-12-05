@@ -4,7 +4,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { EventEmitter } from 'events';
-import { testWebhook } from './relay.js';
+import { testWebhook, sendToN8n } from './relay.js';
+import { formatMessageEvent } from './payload.js';
+import { isBotCalled } from './filters.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -311,6 +313,190 @@ app.get('/api/logs/stream', (req, res) => {
   req.on('close', () => {
     logEmitter.off('log', logHandler);
   });
+});
+
+// Store reference to Discord client (set by index.js)
+let discordClient = null;
+
+/**
+ * Set Discord client reference for testing
+ */
+export function setDiscordClient(client) {
+  discordClient = client;
+}
+
+// API: Test Discord integration (simulate a message)
+app.post('/api/test-discord', async (req, res) => {
+  try {
+    if (!discordClient) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Discord client not available. Bot may not be started yet.' 
+      });
+    }
+    
+    if (!discordClient.isReady()) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Discord bot is not connected. Please check your DISCORD_TOKEN and ensure the bot is running.' 
+      });
+    }
+
+    const { testMessage } = req.body;
+    // Get prefix from config (read from env)
+    const configContent = await readConfigFile();
+    const config = parseEnv(configContent);
+    const prefix = config.BOT_PREFIX || '!bot';
+    const testMsg = testMessage || `${prefix} teste`;
+    
+    // Create a mock message object that mimics Discord's message structure
+    const mockMessage = {
+      id: `test_${Date.now()}`,
+      content: testMsg,
+      author: {
+        id: '123456789012345678',
+        username: 'TestUser',
+        displayName: 'Test User',
+        bot: false,
+        discriminator: '0',
+        displayAvatarURL: () => null,
+      },
+      channel: {
+        id: '234567890123456789',
+        name: 'test-channel',
+        type: 0,
+        isDMBased: () => false,
+      },
+      guild: {
+        id: '345678901234567890',
+        name: 'Test Server',
+      },
+      mentions: {
+        has: (user) => {
+          // Check if message mentions the bot
+          const botMention = `<@${discordClient.user.id}>`;
+          const botMentionAlt = `<@!${discordClient.user.id}>`;
+          return testMsg.includes(botMention) || testMsg.includes(botMentionAlt);
+        },
+        users: {
+          size: 0,
+        },
+      },
+      attachments: [],
+      embeds: [],
+      createdAt: new Date(),
+    };
+
+    addLogEntry('info', `🧪 Testando integração Discord: "${mockMessage.content}"`);
+
+    // Check if bot would be called
+    const { called, rule, cleanContent } = isBotCalled(mockMessage, discordClient);
+    
+    if (!called) {
+      const botTag = discordClient.user?.tag || 'Bot';
+      addLogEntry('warn', `⚠️ Bot não foi acionado. Verifique: prefixo="${prefix}" ou menção ao bot`);
+      return res.json({
+        success: false,
+        error: 'Bot was not called',
+        details: {
+          message: mockMessage.content,
+          prefix: prefix,
+          botMentioned: mockMessage.mentions.has(discordClient.user),
+          suggestion: `Try: "${prefix} teste" or mention the bot (@${botTag})`,
+        },
+      });
+    }
+
+    addLogEntry('info', `✅ Bot acionado via ${rule}: "${cleanContent}"`);
+
+    // Format the payload
+    const payload = formatMessageEvent(mockMessage, 'message_create', rule);
+
+    // Send to all configured n8n webhooks
+    const results = await sendToN8n(payload);
+
+    if (results.length === 0) {
+      addLogEntry('warn', '⚠️ Nenhum webhook configurado para receber o teste');
+      return res.json({
+        success: false,
+        error: 'No webhooks configured',
+        details: {
+          messageProcessed: true,
+          botCalled: true,
+          rule,
+          webhooksConfigured: 0,
+        },
+      });
+    }
+
+    // Log results
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+
+    if (successCount > 0) {
+      addLogEntry('info', `✅ Teste enviado com sucesso para ${successCount} webhook(s)`);
+    }
+    if (failCount > 0) {
+      addLogEntry('error', `❌ Falha ao enviar para ${failCount} webhook(s)`);
+    }
+
+    res.json({
+      success: successCount > 0,
+      message: successCount > 0 
+        ? `Test message sent successfully to ${successCount} webhook(s)`
+        : 'Test message failed to send to all webhooks',
+      details: {
+        messageProcessed: true,
+        botCalled: true,
+        rule,
+        cleanContent,
+        webhooksTotal: results.length,
+        webhooksSuccess: successCount,
+        webhooksFailed: failCount,
+        results: results.map(r => ({
+          webhook: r.webhook,
+          success: r.success,
+          status: r.status,
+          error: r.error,
+        })),
+      },
+    });
+  } catch (error) {
+    addLogEntry('error', `Erro no teste Discord: ${error.message}`);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API: Get bot status
+app.get('/api/bot-status', async (req, res) => {
+  try {
+    if (!discordClient) {
+      return res.json({
+        success: true,
+        status: {
+          connected: false,
+          error: 'Bot not started yet',
+        },
+      });
+    }
+    
+    const { GatewayIntentBits } = await import('discord.js');
+    
+    const status = {
+      connected: discordClient.isReady(),
+      botTag: discordClient.user?.tag || null,
+      botId: discordClient.user?.id || null,
+      guilds: discordClient.guilds?.cache.size || 0,
+      intents: discordClient.options.intents?.toArray() || [],
+      hasGuilds: discordClient.options.intents?.has(GatewayIntentBits.Guilds) || false,
+      hasGuildMessages: discordClient.options.intents?.has(GatewayIntentBits.GuildMessages) || false,
+      hasMessageContent: discordClient.options.intents?.has(GatewayIntentBits.MessageContent) || false,
+    };
+
+    res.json({ success: true, status });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 const PORT = process.env.WEBUI_PORT || 3001;
