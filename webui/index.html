@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Relay Bot - Configuration</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .required {
+            color: #e74c3c;
+        }
+        
+        input[type="text"],
+        input[type="password"],
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .help-text {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+            line-height: 1.5;
+        }
+        
+        .help-text a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        
+        .help-text a:hover {
+            text-decoration: underline;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .status {
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .status-item {
+            display: inline-block;
+            margin: 0 15px;
+            font-size: 14px;
+        }
+        
+        .status-item strong {
+            color: #667eea;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Discord Relay Bot</h1>
+            <p>Configure your bot settings</p>
+        </div>
+        
+        <div class="content">
+            <div id="alert" class="alert"></div>
+            
+            <div class="status">
+                <div class="status-item">
+                    <strong>Status:</strong> <span id="status">Loading...</span>
+                </div>
+            </div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p style="margin-top: 10px;">Saving configuration...</p>
+            </div>
+            
+            <form id="configForm">
+                <!-- Discord Configuration -->
+                <div class="section">
+                    <div class="section-title">🔐 Discord Bot Configuration</div>
+                    
+                    <div class="form-group">
+                        <label for="DISCORD_TOKEN">
+                            Discord Bot Token <span class="required">*</span>
+                        </label>
+                        <input type="password" id="DISCORD_TOKEN" name="DISCORD_TOKEN" required>
+                        <div class="help-text">
+                            Get this from <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → Your App → Bot tab → Token
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="DISCORD_CLIENT_ID">Discord Client ID (Optional)</label>
+                        <input type="text" id="DISCORD_CLIENT_ID" name="DISCORD_CLIENT_ID" placeholder="123456789012345678">
+                        <div class="help-text">
+                            Get this from <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → Your App → General Information → Application ID
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- n8n Configuration -->
+                <div class="section">
+                    <div class="section-title">🔗 n8n Webhook Configuration</div>
+                    
+                    <div class="form-group">
+                        <label for="N8N_WEBHOOK_URL">
+                            n8n Webhook URL <span class="required">*</span>
+                        </label>
+                        <input type="text" id="N8N_WEBHOOK_URL" name="N8N_WEBHOOK_URL" required>
+                        <div class="help-text">
+                            Create a Webhook node in n8n workflow and copy the full URL (e.g., https://n8n.example.com/webhook/discord/bot/abc123)
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Security Configuration -->
+                <div class="section">
+                    <div class="section-title">🔒 Security Configuration</div>
+                    
+                    <div class="form-group">
+                        <label for="RELAY_SHARED_SECRET">Shared Secret (Recommended)</label>
+                        <input type="password" id="RELAY_SHARED_SECRET" name="RELAY_SHARED_SECRET">
+                        <div class="help-text">
+                            Generate with: <code>openssl rand -hex 32</code><br>
+                            Use the same secret in your n8n workflow for HMAC verification
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Bot Behavior -->
+                <div class="section">
+                    <div class="section-title">⚙️ Bot Behavior</div>
+                    
+                    <div class="form-group">
+                        <label for="BOT_PREFIX">Command Prefix</label>
+                        <input type="text" id="BOT_PREFIX" name="BOT_PREFIX" value="!bot">
+                        <div class="help-text">
+                            Prefix to trigger the bot (e.g., !bot, !tobias). Bot also responds to mentions.
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="ALLOWED_GUILD_IDS">Allowed Server IDs (Optional)</label>
+                        <input type="text" id="ALLOWED_GUILD_IDS" name="ALLOWED_GUILD_IDS">
+                        <div class="help-text">
+                            Comma-separated list of Discord server IDs. Leave empty to allow all servers.
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Logging -->
+                <div class="section">
+                    <div class="section-title">📊 Logging</div>
+                    
+                    <div class="form-group">
+                        <label for="LOG_LEVEL">Log Level</label>
+                        <select id="LOG_LEVEL" name="LOG_LEVEL" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 6px;">
+                            <option value="error">Error</option>
+                            <option value="warn">Warning</option>
+                            <option value="info" selected>Info</option>
+                            <option value="debug">Debug</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="NODE_ENV">Environment</label>
+                        <select id="NODE_ENV" name="NODE_ENV" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 6px;">
+                            <option value="production" selected>Production</option>
+                            <option value="development">Development</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="button-group">
+                    <button type="button" class="btn-secondary" onclick="loadConfig()">Reload</button>
+                    <button type="button" class="btn-secondary" onclick="validateConfig()">Validate</button>
+                    <button type="submit" class="btn-primary">Save Configuration</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        // Show alert message
+        function showAlert(message, type = 'success') {
+            const alert = document.getElementById('alert');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            alert.style.display = 'block';
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Load current configuration
+        async function loadConfig() {
+            try {
+                document.getElementById('status').textContent = 'Loading...';
+                const response = await fetch('/api/config');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const config = data.config;
+                    // Populate form fields
+                    Object.keys(config).forEach(key => {
+                        const input = document.getElementById(key);
+                        if (input) {
+                            input.value = config[key] || '';
+                        }
+                    });
+                    document.getElementById('status').textContent = 'Configuration loaded';
+                    showAlert('Configuration loaded successfully', 'success');
+                } else {
+                    throw new Error(data.error || 'Failed to load configuration');
+                }
+            } catch (error) {
+                document.getElementById('status').textContent = 'Error loading';
+                showAlert('Error loading configuration: ' + error.message, 'error');
+            }
+        }
+        
+        // Validate configuration
+        async function validateConfig() {
+            try {
+                const formData = new FormData(document.getElementById('configForm'));
+                const config = Object.fromEntries(formData);
+                
+                const response = await fetch('/api/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    let message = '✅ Configuration is valid!';
+                    if (data.warnings && data.warnings.length > 0) {
+                        message += '\n⚠️ Warnings: ' + data.warnings.join(', ');
+                    }
+                    showAlert(message, data.warnings?.length > 0 ? 'warning' : 'success');
+                } else {
+                    showAlert('❌ Validation errors: ' + data.errors.join(', '), 'error');
+                }
+            } catch (error) {
+                showAlert('Error validating: ' + error.message, 'error');
+            }
+        }
+        
+        // Save configuration
+        document.getElementById('configForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+            
+            try {
+                const formData = new FormData(e.target);
+                const config = Object.fromEntries(formData);
+                
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                
+                const data = await response.json();
+                
+                loading.style.display = 'none';
+                
+                if (data.success) {
+                    document.getElementById('status').textContent = 'Configuration saved';
+                    showAlert('Configuration saved successfully!', 'success');
+                } else {
+                    throw new Error(data.error || 'Failed to save configuration');
+                }
+            } catch (error) {
+                loading.style.display = 'none';
+                showAlert('Error saving configuration: ' + error.message, 'error');
+            }
+        });
+        
+        // Load config on page load
+        loadConfig();
+    </script>
+</body>
+</html>

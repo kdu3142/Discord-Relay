@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  discord-relay:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: discord-relay
+    restart: unless-stopped
+    environment:
+      # Required
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
+      # Optional
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID:-}
+      - RELAY_SHARED_SECRET=${RELAY_SHARED_SECRET:-}
+      - ALLOWED_GUILD_IDS=${ALLOWED_GUILD_IDS:-}
+      - BOT_PREFIX=${BOT_PREFIX:-!bot}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - NODE_ENV=${NODE_ENV:-production}
+      - START_WEBUI=${START_WEBUI:-true}
+      - WEBUI_PORT=${WEBUI_PORT:-3001}
+    ports:
+      - "${WEBUI_PORT:-3001}:3001"  # Web UI port for configuration
+    volumes:
+      - ./config.env:/app/config.env:rw  # Persist config.env file so web UI can save configuration
+    # Bot connects outbound to Discord Gateway (no inbound ports needed for bot itself)
+    # No volumes needed - stateless application
+    # Optional: join existing network if n8n is on same network
+    # networks:
+    #   - default
+    #   - n8n-network  # Uncomment if n8n is on a named network
