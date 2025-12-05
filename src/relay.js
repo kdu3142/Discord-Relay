@@ -1,7 +1,60 @@
 import axios from 'axios';
 import crypto from 'crypto';
-import config from './config.js';
+import config, { reloadConfig, readConfigFile, parseEnv } from './config.js';
 import logger from './logger.js';
+
+/**
+ * Get current webhook configuration
+ * This reads from file to ensure we have the latest saved config
+ */
+async function getCurrentWebhooks() {
+  try {
+    // Try to read fresh config from file
+    const configContent = await readConfigFile();
+    const envConfig = parseEnv(configContent);
+    
+    // Parse default webhook
+    let defaultWebhook = null;
+    const rawUrl = envConfig.N8N_WEBHOOK_URL;
+    if (rawUrl) {
+      const trimmedUrl = rawUrl.trim();
+      if (trimmedUrl !== '' && trimmedUrl !== 'your_n8n_webhook_url_here') {
+        defaultWebhook = trimmedUrl;
+      }
+    }
+    
+    // Parse multiple webhooks
+    const webhooks = {};
+    if (envConfig.N8N_WEBHOOKS) {
+      try {
+        const parsed = JSON.parse(envConfig.N8N_WEBHOOKS);
+        for (const [name, url] of Object.entries(parsed)) {
+          if (url && typeof url === 'string') {
+            const trimmedUrl = url.trim();
+            if (trimmedUrl !== '' && trimmedUrl !== 'your_n8n_webhook_url_here') {
+              webhooks[name] = trimmedUrl;
+            }
+          }
+        }
+      } catch (e) {
+        logger.warn('Failed to parse N8N_WEBHOOKS JSON', { error: e.message });
+      }
+    }
+    
+    // Parse shared secret
+    const sharedSecret = envConfig.RELAY_SHARED_SECRET || null;
+    
+    return { defaultWebhook, webhooks, sharedSecret };
+  } catch (error) {
+    logger.warn('Failed to read fresh config, using cached config', { error: error.message });
+    // Fallback to cached config
+    return {
+      defaultWebhook: config.n8n.webhookUrl,
+      webhooks: config.n8n.webhooks || {},
+      sharedSecret: config.relay.sharedSecret,
+    };
+  }
+}
 
 /**
  * Generates HMAC signature for the payload
@@ -21,10 +74,10 @@ function generateSignature(payload, secret) {
  * @param {string} webhookUrl - The webhook URL to send to
  * @param {Object} payload - The normalized payload to send
  * @param {string} webhookName - Optional name for logging
+ * @param {string} sharedSecret - Optional shared secret for HMAC
  * @returns {Promise<{ success: boolean, status?: number, error?: string }>}
  */
-async function sendToWebhook(webhookUrl, payload, webhookName = 'n8n') {
-  const sharedSecret = config.relay.sharedSecret;
+async function sendToWebhook(webhookUrl, payload, webhookName = 'n8n', sharedSecret = null) {
   const timestamp = new Date().toISOString();
 
   // Prepare headers
@@ -127,35 +180,33 @@ async function sendToWebhook(webhookUrl, payload, webhookName = 'n8n') {
 export async function sendToN8n(payload) {
   const results = [];
   
+  // Get current webhook configuration (reads from file for latest values)
+  const { defaultWebhook, webhooks, sharedSecret } = await getCurrentWebhooks();
+  
+  logger.debug('Current webhook configuration', {
+    hasDefaultWebhook: !!defaultWebhook,
+    webhooksCount: Object.keys(webhooks).length,
+    hasSharedSecret: !!sharedSecret,
+  });
+  
   // Send to default webhook if configured
-  // URLs are already trimmed in config, but double-check for safety
-  if (config.n8n.webhookUrl && 
-      config.n8n.webhookUrl !== 'your_n8n_webhook_url_here' &&
-      config.n8n.webhookUrl.trim() !== '') {
-    // Use trimmed URL (should already be trimmed, but ensure it)
-    const trimmedUrl = config.n8n.webhookUrl.trim();
-    const result = await sendToWebhook(trimmedUrl, payload, 'default');
+  if (defaultWebhook) {
+    const result = await sendToWebhook(defaultWebhook, payload, 'default', sharedSecret);
     results.push({
       webhook: 'default',
-      url: trimmedUrl,
+      url: defaultWebhook,
       ...result,
     });
   }
 
   // Send to all additional webhooks
-  // URLs are already trimmed in config, but ensure they're trimmed before use
-  for (const [name, url] of Object.entries(config.n8n.webhooks)) {
-    if (url && typeof url === 'string') {
-      const trimmedUrl = url.trim();
-      if (trimmedUrl !== '' && trimmedUrl !== 'your_n8n_webhook_url_here') {
-        const result = await sendToWebhook(trimmedUrl, payload, name);
-        results.push({
-          webhook: name,
-          url: trimmedUrl,
-          ...result,
-        });
-      }
-    }
+  for (const [name, url] of Object.entries(webhooks)) {
+    const result = await sendToWebhook(url, payload, name, sharedSecret);
+    results.push({
+      webhook: name,
+      url: url,
+      ...result,
+    });
   }
 
   return results;

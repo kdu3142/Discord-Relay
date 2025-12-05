@@ -310,10 +310,19 @@ app.post('/api/test-discord', async (req, res) => {
       });
     }
     
-    if (!discordClient.isReady()) {
+    // Check if bot is connected - use multiple indicators since isReady() can be unreliable
+    const isConnected = discordClient.isReady() || 
+                        (discordClient.user && discordClient.ws.status === 0);
+    
+    if (!isConnected) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Discord bot is not connected. Please check your DISCORD_TOKEN and ensure the bot is running.' 
+        error: 'Discord bot is not connected. Please check your DISCORD_TOKEN and ensure the bot is running.',
+        debug: {
+          isReady: discordClient.isReady(),
+          hasUser: !!discordClient.user,
+          wsStatus: discordClient.ws.status,
+        }
       });
     }
 
