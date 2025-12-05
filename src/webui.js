@@ -194,26 +194,27 @@ app.post('/api/validate', async (req, res) => {
       errors.push('DISCORD_TOKEN is required');
     }
     
-    // Check webhooks
-    const hasDefaultWebhook = config.N8N_WEBHOOK_URL && 
-      config.N8N_WEBHOOK_URL !== 'your_n8n_webhook_url_here' &&
-      config.N8N_WEBHOOK_URL.trim() !== '';
+    // Check webhooks (trim URLs for consistent validation)
+    const defaultWebhookUrl = config.N8N_WEBHOOK_URL ? config.N8N_WEBHOOK_URL.trim() : '';
+    const hasDefaultWebhook = defaultWebhookUrl && 
+      defaultWebhookUrl !== 'your_n8n_webhook_url_here' &&
+      defaultWebhookUrl !== '';
     
     let hasMultipleWebhooks = false;
     if (config.N8N_WEBHOOKS_PARSED) {
       const webhooks = config.N8N_WEBHOOKS_PARSED;
       hasMultipleWebhooks = Object.keys(webhooks).length > 0 && 
-        Object.values(webhooks).some(url => url && url.trim() !== '');
+        Object.values(webhooks).some(url => url && typeof url === 'string' && url.trim() !== '');
     }
     
     if (!hasDefaultWebhook && !hasMultipleWebhooks) {
       errors.push('At least one n8n webhook URL is required');
     }
     
-    // Validate URLs
-    if (config.N8N_WEBHOOK_URL && config.N8N_WEBHOOK_URL !== 'your_n8n_webhook_url_here') {
+    // Validate URLs (use trimmed URLs for validation)
+    if (defaultWebhookUrl && defaultWebhookUrl !== 'your_n8n_webhook_url_here') {
       try {
-        new URL(config.N8N_WEBHOOK_URL);
+        new URL(defaultWebhookUrl);
       } catch (e) {
         errors.push('N8N_WEBHOOK_URL must be a valid URL');
       }
@@ -221,11 +222,14 @@ app.post('/api/validate', async (req, res) => {
     
     if (config.N8N_WEBHOOKS_PARSED) {
       for (const [name, url] of Object.entries(config.N8N_WEBHOOKS_PARSED)) {
-        if (url && url.trim() !== '') {
-          try {
-            new URL(url);
-          } catch (e) {
-            errors.push(`Webhook "${name}" URL is not valid`);
+        if (url && typeof url === 'string') {
+          const trimmedUrl = url.trim();
+          if (trimmedUrl !== '') {
+            try {
+              new URL(trimmedUrl);
+            } catch (e) {
+              errors.push(`Webhook "${name}" URL is not valid`);
+            }
           }
         }
       }
@@ -251,19 +255,24 @@ app.post('/api/test-webhook', async (req, res) => {
   try {
     const { webhookUrl, sharedSecret } = req.body;
     
-    if (!webhookUrl || webhookUrl.trim() === '') {
+    // Trim URL immediately for consistent validation
+    const trimmedUrl = webhookUrl ? webhookUrl.trim() : '';
+    
+    if (!trimmedUrl || trimmedUrl === '') {
       return res.status(400).json({ success: false, error: 'Webhook URL is required' });
     }
     
+    // Validate trimmed URL
     try {
-      new URL(webhookUrl);
+      new URL(trimmedUrl);
     } catch (e) {
       return res.status(400).json({ success: false, error: 'Invalid webhook URL format' });
     }
     
-    addLogEntry('info', `Testing webhook: ${webhookUrl.replace(/\/[^\/]+$/, '/***')}`);
+    addLogEntry('info', `Testing webhook: ${trimmedUrl.replace(/\/[^\/]+$/, '/***')}`);
     
-    const result = await testWebhook(webhookUrl, sharedSecret || null);
+    // Use trimmed URL for testing
+    const result = await testWebhook(trimmedUrl, sharedSecret || null);
     
     if (result.success) {
       addLogEntry('info', `Webhook test successful (${result.status})`, { responseTime: result.responseTime });

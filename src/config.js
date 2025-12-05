@@ -26,8 +26,11 @@ function validateConfig() {
   );
 
   // Check if at least one webhook is configured
-  const hasDefaultWebhook = process.env.N8N_WEBHOOK_URL && 
-    process.env.N8N_WEBHOOK_URL !== 'your_n8n_webhook_url_here';
+  // Trim whitespace before checking to prevent whitespace-only URLs from passing
+  const defaultWebhookUrl = process.env.N8N_WEBHOOK_URL ? process.env.N8N_WEBHOOK_URL.trim() : '';
+  const hasDefaultWebhook = defaultWebhookUrl && 
+    defaultWebhookUrl !== 'your_n8n_webhook_url_here' &&
+    defaultWebhookUrl !== '';
   const hasMultipleWebhooks = process.env.N8N_WEBHOOKS && 
     process.env.N8N_WEBHOOKS.trim() !== '';
 
@@ -46,30 +49,38 @@ function validateConfig() {
     );
   }
 
-  // Validate webhook URLs
-  if (process.env.N8N_WEBHOOK_URL && 
-      process.env.N8N_WEBHOOK_URL !== 'your_n8n_webhook_url_here') {
+  // Validate webhook URLs (trim before validation to ensure consistency)
+  const trimmedDefaultWebhook = process.env.N8N_WEBHOOK_URL ? process.env.N8N_WEBHOOK_URL.trim() : '';
+  if (trimmedDefaultWebhook && 
+      trimmedDefaultWebhook !== 'your_n8n_webhook_url_here' &&
+      trimmedDefaultWebhook !== '') {
     try {
-      new URL(process.env.N8N_WEBHOOK_URL);
+      new URL(trimmedDefaultWebhook);
     } catch (error) {
       throw new Error(
-        `N8N_WEBHOOK_URL is not a valid URL: ${process.env.N8N_WEBHOOK_URL}`
+        `N8N_WEBHOOK_URL is not a valid URL: ${trimmedDefaultWebhook}`
       );
     }
   }
 
   // Validate multiple webhooks JSON
+  // Trim URLs before validation to ensure consistency with parseWebhooks()
   if (process.env.N8N_WEBHOOKS && process.env.N8N_WEBHOOKS.trim() !== '') {
     try {
       const webhooks = JSON.parse(process.env.N8N_WEBHOOKS);
       for (const [name, url] of Object.entries(webhooks)) {
-        if (typeof url !== 'string' || url.trim() === '') {
-          throw new Error(`Webhook "${name}" has invalid URL`);
+        if (typeof url !== 'string') {
+          throw new Error(`Webhook "${name}" has invalid URL type`);
         }
+        const trimmedUrl = url.trim();
+        if (trimmedUrl === '') {
+          throw new Error(`Webhook "${name}" has empty URL`);
+        }
+        // Validate trimmed URL to match what will actually be stored
         try {
-          new URL(url);
+          new URL(trimmedUrl);
         } catch (e) {
-          throw new Error(`Webhook "${name}" URL is not valid: ${url}`);
+          throw new Error(`Webhook "${name}" URL is not valid: ${trimmedUrl}`);
         }
       }
     } catch (error) {
@@ -80,13 +91,28 @@ function validateConfig() {
 
 /**
  * Parse multiple webhooks from JSON string
+ * Filters out placeholder and empty values
  */
 function parseWebhooks(webhooksJson) {
   if (!webhooksJson || webhooksJson.trim() === '') {
     return {};
   }
   try {
-    return JSON.parse(webhooksJson);
+    const webhooks = JSON.parse(webhooksJson);
+    // Filter out placeholder values and empty strings
+    // Store trimmed URLs to ensure consistency between validation and usage
+    const filtered = {};
+    for (const [name, url] of Object.entries(webhooks)) {
+      if (url && 
+          typeof url === 'string') {
+        const trimmedUrl = url.trim();
+        if (trimmedUrl !== '' && 
+            trimmedUrl !== 'your_n8n_webhook_url_here') {
+          filtered[name] = trimmedUrl; // Store trimmed URL
+        }
+      }
+    }
+    return filtered;
   } catch (error) {
     // logger not available here, just return empty
     return {};
@@ -104,7 +130,16 @@ const config = {
   },
   n8n: {
     // Default webhook (for backward compatibility)
-    webhookUrl: process.env.N8N_WEBHOOK_URL || null,
+    // Filter out placeholder value and trim whitespace to prevent sending to invalid URL
+    webhookUrl: (() => {
+      const rawUrl = process.env.N8N_WEBHOOK_URL;
+      if (!rawUrl) return null;
+      const trimmedUrl = rawUrl.trim();
+      if (trimmedUrl === '' || trimmedUrl === 'your_n8n_webhook_url_here') {
+        return null;
+      }
+      return trimmedUrl; // Store trimmed URL for consistency
+    })(),
     // Multiple webhooks: JSON format {"workflow1": "url1", "workflow2": "url2"}
     webhooks: parseWebhooks(process.env.N8N_WEBHOOKS),
   },

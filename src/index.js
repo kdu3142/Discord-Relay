@@ -68,6 +68,20 @@ client.on(Events.MessageCreate, async (message) => {
     // Send to all configured n8n webhooks
     const results = await sendToN8n(payload);
 
+    // Check if any webhooks are configured
+    if (results.length === 0) {
+      const errorMsg = 'No webhooks configured - message not relayed';
+      logger.warn(errorMsg, {
+        messageId: message.id,
+        channelId: message.channel.id,
+        guildId: message.guild.id,
+      });
+      addLogEntry('warn', '⚠️ Nenhum webhook configurado - mensagem não foi enviada', {
+        messageId: message.id,
+      });
+      return; // Exit early if no webhooks
+    }
+
     // Log results for each webhook
     for (const result of results) {
       if (result.success) {

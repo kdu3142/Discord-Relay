@@ -495,7 +495,7 @@
                     </label>
                     <input type="password" id="DISCORD_TOKEN" name="DISCORD_TOKEN" required>
                     <div class="help-text">
-                        Obtenha em <a href="https://discord.com/developers/applications" target="_blank">Discord Developer Portal</a> → Seu App → Bot → Token
+                        Obtenha em <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer">Discord Developer Portal</a> → Seu App → Bot → Token
                     </div>
                 </div>
                 
@@ -523,7 +523,7 @@
                     <div class="help-text">
                         Webhook principal usado quando nenhum webhook específico está configurado
                     </div>
-                    <div id="testResult_N8N_WEBHOOK_URL"></div>
+                    <div id="testResult-N8N_WEBHOOK_URL"></div>
                 </div>
                 
                 <div id="webhooksContainer">
@@ -765,7 +765,17 @@ return $json;</pre>
                             // Handle multiple webhooks
                             const webhooks = config[key];
                             webhookCounter = 0;
-                            document.getElementById('webhooksContainer').innerHTML = '<label>Webhooks Adicionais</label><div class="help-text" style="margin-bottom: 15px;">Adicione webhooks nomeados para workflows específicos (ex: "workflow1", "workflow2")</div>';
+                            // Clear and rebuild container safely
+                            const container = document.getElementById('webhooksContainer');
+                            container.textContent = '';
+                            const label = document.createElement('label');
+                            label.textContent = 'Webhooks Adicionais';
+                            const helpText = document.createElement('div');
+                            helpText.className = 'help-text';
+                            helpText.style.marginBottom = '15px';
+                            helpText.textContent = 'Adicione webhooks nomeados para workflows específicos (ex: "workflow1", "workflow2")';
+                            container.appendChild(label);
+                            container.appendChild(helpText);
                             
                             Object.entries(webhooks).forEach(([name, url]) => {
                                 addWebhook(name, url);
@@ -797,16 +807,41 @@ return $json;</pre>
             div.className = 'webhook-item';
             div.id = `webhook-${webhookCounter}`;
             
-            div.innerHTML = `
-                <input type="text" class="webhook-name" placeholder="Nome (ex: workflow1)" 
-                       value="${name}" onchange="updateWebhooks()">
-                <input type="text" placeholder="URL do Webhook" 
-                       value="${url}" onchange="updateWebhooks()" 
-                       id="webhook-url-${webhookCounter}">
-                <button type="button" class="btn-test" onclick="testWebhookField('webhook-url-${webhookCounter}')">Testar</button>
-                <button type="button" class="remove-webhook-btn" onclick="removeWebhook(${webhookCounter})">Remover</button>
-                <div id="testResult-webhook-url-${webhookCounter}"></div>
-            `;
+            // Create elements safely to prevent XSS
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.className = 'webhook-name';
+            nameInput.placeholder = 'Nome (ex: workflow1)';
+            nameInput.value = name; // Safe: input.value escapes automatically
+            nameInput.onchange = updateWebhooks;
+            
+            const urlInput = document.createElement('input');
+            urlInput.type = 'text';
+            urlInput.placeholder = 'URL do Webhook';
+            urlInput.value = url; // Safe: input.value escapes automatically
+            urlInput.onchange = updateWebhooks;
+            urlInput.id = `webhook-url-${webhookCounter}`;
+            
+            const testBtn = document.createElement('button');
+            testBtn.type = 'button';
+            testBtn.className = 'btn-test';
+            testBtn.textContent = 'Testar';
+            testBtn.onclick = () => testWebhookField(`webhook-url-${webhookCounter}`);
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'remove-webhook-btn';
+            removeBtn.textContent = 'Remover';
+            removeBtn.onclick = () => removeWebhook(webhookCounter);
+            
+            const resultDiv = document.createElement('div');
+            resultDiv.id = `testResult-webhook-url-${webhookCounter}`;
+            
+            div.appendChild(nameInput);
+            div.appendChild(urlInput);
+            div.appendChild(testBtn);
+            div.appendChild(removeBtn);
+            div.appendChild(resultDiv);
             
             container.appendChild(div);
             webhookCounter++;
@@ -847,7 +882,13 @@ return $json;</pre>
             }
             
             try {
-                resultDiv.innerHTML = '<div class="test-result">Testando...</div>';
+                // Clear and show loading state safely
+                resultDiv.textContent = '';
+                const loadingDiv = document.createElement('div');
+                loadingDiv.className = 'test-result';
+                loadingDiv.textContent = 'Testando...';
+                resultDiv.appendChild(loadingDiv);
+                
                 const sharedSecret = document.getElementById('RELAY_SHARED_SECRET').value;
                 
                 const response = await fetch('/api/test-webhook', {
@@ -858,21 +899,28 @@ return $json;</pre>
                 
                 const data = await response.json();
                 
+                // Clear and create result safely
+                resultDiv.textContent = '';
+                const resultDivContent = document.createElement('div');
+                
                 if (data.success && data.result.success) {
-                    resultDiv.innerHTML = `<div class="test-result success">
-                        ✅ Sucesso! Status: ${data.result.status}, Tempo: ${data.result.responseTime}ms
-                    </div>`;
+                    resultDivContent.className = 'test-result success';
+                    resultDivContent.textContent = `✅ Sucesso! Status: ${data.result.status}, Tempo: ${data.result.responseTime}ms`;
                     showToast('Webhook testado com sucesso!', 'success');
                 } else {
-                    resultDiv.innerHTML = `<div class="test-result error">
-                        ❌ Erro: ${data.result.error || 'Falha desconhecida'}
-                    </div>`;
+                    resultDivContent.className = 'test-result error';
+                    const errorMsg = data.result?.error || 'Falha desconhecida';
+                    resultDivContent.textContent = `❌ Erro: ${errorMsg}`;
                     showToast('Falha ao testar webhook', 'error');
                 }
+                resultDiv.appendChild(resultDivContent);
             } catch (error) {
-                resultDiv.innerHTML = `<div class="test-result error">
-                    ❌ Erro: ${error.message}
-                </div>`;
+                // Clear and create error message safely
+                resultDiv.textContent = '';
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'test-result error';
+                errorDiv.textContent = `❌ Erro: ${error.message}`;
+                resultDiv.appendChild(errorDiv);
                 showToast('Erro ao testar: ' + error.message, 'error');
             }
         }
@@ -998,12 +1046,21 @@ return $json;</pre>
             const entry = document.createElement('div');
             entry.className = 'log-entry';
             
-            const time = new Date(log.timestamp).toLocaleTimeString();
-            entry.innerHTML = `
-                <span class="log-timestamp">[${time}]</span>
-                <span class="log-level ${log.level}">[${log.level.toUpperCase()}]</span>
-                <span>${log.message}</span>
-            `;
+            // Create elements safely to prevent XSS
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'log-timestamp';
+            timeSpan.textContent = `[${new Date(log.timestamp).toLocaleTimeString()}]`;
+            
+            const levelSpan = document.createElement('span');
+            levelSpan.className = `log-level ${log.level}`;
+            levelSpan.textContent = `[${log.level.toUpperCase()}]`;
+            
+            const messageSpan = document.createElement('span');
+            messageSpan.textContent = log.message; // Safe: textContent escapes HTML
+            
+            entry.appendChild(timeSpan);
+            entry.appendChild(levelSpan);
+            entry.appendChild(messageSpan);
             
             container.appendChild(entry);
             container.scrollTop = container.scrollHeight;

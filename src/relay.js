@@ -128,23 +128,34 @@ export async function sendToN8n(payload) {
   const results = [];
   
   // Send to default webhook if configured
-  if (config.n8n.webhookUrl) {
-    const result = await sendToWebhook(config.n8n.webhookUrl, payload, 'default');
+  // URLs are already trimmed in config, but double-check for safety
+  if (config.n8n.webhookUrl && 
+      config.n8n.webhookUrl !== 'your_n8n_webhook_url_here' &&
+      config.n8n.webhookUrl.trim() !== '') {
+    // Use trimmed URL (should already be trimmed, but ensure it)
+    const trimmedUrl = config.n8n.webhookUrl.trim();
+    const result = await sendToWebhook(trimmedUrl, payload, 'default');
     results.push({
       webhook: 'default',
-      url: config.n8n.webhookUrl,
+      url: trimmedUrl,
       ...result,
     });
   }
 
   // Send to all additional webhooks
+  // URLs are already trimmed in config, but ensure they're trimmed before use
   for (const [name, url] of Object.entries(config.n8n.webhooks)) {
-    const result = await sendToWebhook(url, payload, name);
-    results.push({
-      webhook: name,
-      url: url,
-      ...result,
-    });
+    if (url && typeof url === 'string') {
+      const trimmedUrl = url.trim();
+      if (trimmedUrl !== '' && trimmedUrl !== 'your_n8n_webhook_url_here') {
+        const result = await sendToWebhook(trimmedUrl, payload, name);
+        results.push({
+          webhook: name,
+          url: trimmedUrl,
+          ...result,
+        });
+      }
+    }
   }
 
   return results;
