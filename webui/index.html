@@ -1198,6 +1198,33 @@ return $json;</pre>
                     const intentsEl = document.getElementById('intentsStatus');
                     const intentsHelpEl = document.getElementById('intentsHelp');
                     
+                    // Show token analysis if available
+                    if (status.tokenAnalysis) {
+                        const analysis = status.tokenAnalysis;
+                        let tokenIssues = [];
+                        
+                        if (analysis.isEmpty || analysis.isPlaceholder) {
+                            tokenIssues.push('Token não configurado');
+                        }
+                        if (analysis.hasWhitespace) {
+                            tokenIssues.push('Token tem espaços em branco');
+                        }
+                        if (analysis.length < 50) {
+                            tokenIssues.push(`Token muito curto (${analysis.length} chars, esperado 59+)`);
+                        }
+                        if (analysis.parts < 3) {
+                            tokenIssues.push(`Formato inválido (${analysis.parts} partes, esperado 3)`);
+                        }
+                        if (!analysis.startsWithAlphanumeric) {
+                            tokenIssues.push('Token não começa com caractere alfanumérico');
+                        }
+                        
+                        if (tokenIssues.length > 0) {
+                            showToast(`⚠️ Problemas no token: ${tokenIssues.join(', ')}`, 'warning');
+                            console.log('Token Analysis:', analysis);
+                        }
+                    }
+                    
                     if (status.connected) {
                         statusEl.textContent = `✅ Conectado (${status.guilds} servidores)`;
                         statusEl.style.color = 'var(--success)';
@@ -1227,10 +1254,16 @@ return $json;</pre>
                     } else {
                         statusEl.textContent = '❌ Desconectado';
                         statusEl.style.color = 'var(--error)';
-                        statusHelpEl.textContent = 'Verifique DISCORD_TOKEN';
+                        statusHelpEl.textContent = status.error || 'Verifique DISCORD_TOKEN';
                         intentsEl.textContent = '-';
                         intentsHelpEl.textContent = 'Bot não conectado';
-                        showToast('Bot não está conectado. Verifique o DISCORD_TOKEN', 'error');
+                        
+                        // Show detailed error if available
+                        if (status.error) {
+                            showToast(`❌ ${status.error}`, 'error');
+                        } else {
+                            showToast('Bot não está conectado. Verifique o DISCORD_TOKEN e os logs', 'error');
+                        }
                     }
                 }
             } catch (error) {

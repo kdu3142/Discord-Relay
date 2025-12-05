@@ -125,8 +125,9 @@ function parseWebhooks(webhooksJson) {
 const config = {
   // Required
   discord: {
-    token: process.env.DISCORD_TOKEN,
-    clientId: process.env.DISCORD_CLIENT_ID || null,
+    // Trim token to avoid whitespace issues
+    token: process.env.DISCORD_TOKEN ? process.env.DISCORD_TOKEN.trim() : null,
+    clientId: process.env.DISCORD_CLIENT_ID ? process.env.DISCORD_CLIENT_ID.trim() : null,
   },
   n8n: {
     // Default webhook (for backward compatibility)
@@ -161,5 +162,17 @@ const config = {
 
 // Validate on module load
 validateConfig();
+
+// Log config loading (without sensitive data)
+if (process.env.DISCORD_TOKEN) {
+  const token = process.env.DISCORD_TOKEN.trim();
+  const tokenMasked = token.length > 14 
+    ? `${token.substring(0, 10)}...${token.substring(token.length - 4)}`
+    : '***';
+  console.log(`[Config] Discord token loaded: ${tokenMasked} (length: ${token.length})`);
+  console.log(`[Config] Token has whitespace: ${process.env.DISCORD_TOKEN !== process.env.DISCORD_TOKEN.trim()}`);
+} else {
+  console.log('[Config] Discord token not found in environment');
+}
 
 export default config;

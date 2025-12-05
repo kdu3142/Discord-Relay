@@ -470,12 +470,34 @@ app.post('/api/test-discord', async (req, res) => {
 // API: Get bot status
 app.get('/api/bot-status', async (req, res) => {
   try {
+    // Read token from config for analysis
+    const configContent = await readConfigFile();
+    const config = parseEnv(configContent);
+    const token = config.DISCORD_TOKEN || '';
+    const tokenTrimmed = token.trim();
+    
+    // Analyze token
+    const tokenAnalysis = {
+      exists: !!token,
+      isEmpty: tokenTrimmed === '',
+      isPlaceholder: tokenTrimmed === 'your_discord_bot_token_here',
+      length: tokenTrimmed.length,
+      hasWhitespace: token !== tokenTrimmed,
+      parts: tokenTrimmed.split('.').length,
+      startsWithAlphanumeric: /^[A-Za-z0-9]/.test(tokenTrimmed),
+      firstPart: tokenTrimmed.split('.')[0]?.substring(0, 10) || '',
+      masked: tokenTrimmed.length > 14 
+        ? `${tokenTrimmed.substring(0, 10)}...${tokenTrimmed.substring(tokenTrimmed.length - 4)}`
+        : '***',
+    };
+    
     if (!discordClient) {
       return res.json({
         success: true,
         status: {
           connected: false,
           error: 'Bot not started yet',
+          tokenAnalysis,
         },
       });
     }
@@ -491,6 +513,7 @@ app.get('/api/bot-status', async (req, res) => {
       hasGuilds: discordClient.options.intents?.has(GatewayIntentBits.Guilds) || false,
       hasGuildMessages: discordClient.options.intents?.has(GatewayIntentBits.GuildMessages) || false,
       hasMessageContent: discordClient.options.intents?.has(GatewayIntentBits.MessageContent) || false,
+      tokenAnalysis,
     };
 
     res.json({ success: true, status });

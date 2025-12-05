@@ -6,6 +6,19 @@ import { formatMessageEvent } from './payload.js';
 import { sendToN8n } from './relay.js';
 import { startWebUI as startConfigWebUI, addLogEntry, setDiscordClient } from './webui.js';
 
+// Log configuration on startup
+logger.info('Discord Relay Bot starting...', {
+  hasToken: !!config.discord.token,
+  tokenLength: config.discord.token ? config.discord.token.length : 0,
+  tokenIsPlaceholder: config.discord.token === 'your_discord_bot_token_here',
+  hasClientId: !!config.discord.clientId,
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+});
+
 // Create Discord client with required intents
 const client = new Client({
   intents: [
@@ -24,25 +37,38 @@ client.once(Events.ClientReady, (readyClient) => {
     botTag: readyClient.user.tag,
     botId: readyClient.user.id,
     guilds: readyClient.guilds.cache.size,
+    username: readyClient.user.username,
+    discriminator: readyClient.user.discriminator,
   };
   logger.info('Discord bot is ready!', logData);
-  addLogEntry('info', `Bot conectado: ${readyClient.user.tag} (${readyClient.guilds.cache.size} servidores)`, logData);
+  addLogEntry('info', `✅ Bot conectado: ${readyClient.user.tag} (${readyClient.guilds.cache.size} servidores)`, logData);
   
   // Log intents for debugging
   const intents = client.options.intents;
-  logger.info('Bot intents configured', {
+  const intentStatus = {
     intents: intents.toArray(),
     hasGuilds: intents.has(GatewayIntentBits.Guilds),
     hasGuildMessages: intents.has(GatewayIntentBits.GuildMessages),
     hasMessageContent: intents.has(GatewayIntentBits.MessageContent),
-  });
-  addLogEntry('info', `Intents configurados: ${intents.toArray().join(', ')}`, {
-    intents: intents.toArray(),
-  });
+    intentBits: intents.bitfield?.toString(),
+  };
+  logger.info('Bot intents configured', intentStatus);
+  addLogEntry('info', `Intents configurados: ${intents.toArray().join(', ')}`, intentStatus);
   
   // Log guilds for debugging
   const guildList = readyClient.guilds.cache.map(g => ({ id: g.id, name: g.name }));
   logger.info('Bot is in these servers', { guilds: guildList });
+  if (guildList.length > 0) {
+    addLogEntry('info', `Bot está em ${guildList.length} servidor(es)`, { guilds: guildList });
+  } else {
+    addLogEntry('warn', '⚠️ Bot não está em nenhum servidor. Adicione o bot a um servidor via OAuth2 URL Generator', {});
+  }
+  
+  // Log shard info
+  logger.info('Shard information', {
+    shardId: readyClient.shard?.ids?.[0] ?? 0,
+    totalShards: readyClient.shard?.count ?? 1,
+  });
 });
 
 // Message create event handler
@@ -162,16 +188,68 @@ client.on(Events.MessageCreate, async (message) => {
   }
 });
 
-// Error handling
+// Error handling - Detailed logging
 client.on(Events.Error, (error) => {
   logger.error('Discord client error', {
     error: error.message,
+    code: error.code,
     stack: error.stack,
+    name: error.name,
+  });
+  addLogEntry('error', `Erro do cliente Discord: ${error.message}`, {
+    error: error.message,
+    code: error.code,
   });
 });
 
 client.on(Events.Warn, (warning) => {
   logger.warn('Discord client warning', { warning });
+  addLogEntry('warn', `Aviso do cliente Discord: ${warning}`, { warning });
+});
+
+// Debug event - shows all debug messages from discord.js
+client.on(Events.Debug, (info) => {
+  logger.debug('Discord client debug', { info });
+  // Only log critical debug messages to avoid spam
+  if (info.includes('token') || info.includes('auth') || info.includes('connect') || info.includes('disconnect')) {
+    addLogEntry('debug', `Discord debug: ${info}`, { info });
+  }
+});
+
+// Disconnect event
+client.on(Events.ShardDisconnect, (event, shardId) => {
+  logger.warn('Discord shard disconnected', {
+    shardId,
+    code: event.code,
+    reason: event.reason,
+    wasClean: event.wasClean,
+  });
+  addLogEntry('warn', `Shard ${shardId} desconectado: ${event.reason} (code: ${event.code})`, {
+    shardId,
+    code: event.code,
+    reason: event.reason,
+  });
+});
+
+// Reconnecting event
+client.on(Events.ShardReconnecting, (shardId) => {
+  logger.info('Discord shard reconnecting', { shardId });
+  addLogEntry('info', `Shard ${shardId} reconectando...`, { shardId });
+});
+
+// Resume event (reconnected after disconnect)
+client.on(Events.ShardResume, (shardId, replayedEvents) => {
+  logger.info('Discord shard resumed', { shardId, replayedEvents });
+  addLogEntry('info', `Shard ${shardId} reconectado (${replayedEvents} eventos recuperados)`, {
+    shardId,
+    replayedEvents,
+  });
+});
+
+// Invalid session event
+client.on(Events.InvalidSession, (resumable) => {
+  logger.warn('Discord invalid session', { resumable });
+  addLogEntry('warn', `Sessão Discord inválida (resumable: ${resumable})`, { resumable });
 });
 
 // Handle process signals for graceful shutdown
@@ -210,25 +288,141 @@ if (enableWebUI) {
 }
 
 // Start the bot (only if token is configured)
-if (config.discord.token && 
-    config.discord.token !== 'your_discord_bot_token_here' &&
-    config.discord.token.trim() !== '') {
-  logger.info('Starting Discord relay bot...');
-  client.login(config.discord.token).catch((error) => {
-    logger.error('Failed to login to Discord', {
-      error: error.message,
-      stack: error.stack,
-    });
-    // Don't exit if web UI is enabled - allow user to fix config
-    if (!enableWebUI) {
-      process.exit(1);
-    }
+// Token is already trimmed in config.js, but double-check
+const token = config.discord.token;
+const tokenTrimmed = token ? token.trim() : '';
+
+// Detailed token validation and logging
+if (token && token !== 'your_discord_bot_token_here' && tokenTrimmed !== '') {
+  // Mask token for logging (show first 10 chars and last 4 chars)
+  const tokenMasked = tokenTrimmed.length > 14 
+    ? `${tokenTrimmed.substring(0, 10)}...${tokenTrimmed.substring(tokenTrimmed.length - 4)}`
+    : '***';
+  
+  logger.info('Starting Discord relay bot...', {
+    tokenLength: tokenTrimmed.length,
+    tokenPrefix: tokenTrimmed.substring(0, 10),
+    tokenSuffix: tokenTrimmed.substring(tokenTrimmed.length - 4),
+    hasWhitespace: token !== tokenTrimmed,
+    intents: client.options.intents.toArray(),
   });
+  addLogEntry('info', `Tentando conectar ao Discord... Token: ${tokenMasked}`, {
+    tokenLength: tokenTrimmed.length,
+    intents: client.options.intents.toArray(),
+  });
+  
+  // Check for common token issues
+  if (token !== tokenTrimmed) {
+    logger.warn('Token has leading/trailing whitespace - this may cause authentication issues', {
+      originalLength: token.length,
+      trimmedLength: tokenTrimmed.length,
+    });
+    addLogEntry('warn', '⚠️ Token tem espaços em branco - isso pode causar problemas de autenticação', {
+      originalLength: token.length,
+      trimmedLength: tokenTrimmed.length,
+    });
+  }
+  
+  // Validate token format
+  if (tokenTrimmed.length < 50) {
+    logger.warn('Token seems too short - Discord bot tokens are typically 59+ characters', {
+      tokenLength: tokenTrimmed.length,
+    });
+    addLogEntry('warn', '⚠️ Token parece muito curto - tokens do Discord geralmente têm 59+ caracteres', {
+      tokenLength: tokenTrimmed.length,
+    });
+  }
+  
+  // Check token format (Discord bot tokens typically have dots)
+  const tokenParts = tokenTrimmed.split('.');
+  if (tokenParts.length < 3) {
+    logger.warn('Token format may be incorrect - Discord bot tokens typically have 2 dots (3 parts)', {
+      tokenLength: tokenTrimmed.length,
+      parts: tokenParts.length,
+      firstPart: tokenParts[0]?.substring(0, 10),
+    });
+    addLogEntry('warn', '⚠️ Formato do token pode estar incorreto - tokens do Discord geralmente têm 2 pontos', {
+      parts: tokenParts.length,
+    });
+  }
+  
+  // Check if token looks like a Discord token (starts with alphanumeric)
+  if (!/^[A-Za-z0-9]/.test(tokenTrimmed)) {
+    logger.warn('Token does not start with alphanumeric character - may be invalid', {
+      firstChar: tokenTrimmed[0],
+    });
+    addLogEntry('warn', `⚠️ Token não começa com caractere alfanumérico - pode ser inválido (primeiro char: ${tokenTrimmed[0]})`, {
+      firstChar: tokenTrimmed[0],
+    });
+  }
+  
+  // Attempt login with detailed error handling
+  logger.info('Attempting Discord login...');
+  addLogEntry('info', 'Tentando fazer login no Discord...');
+  
+  client.login(tokenTrimmed)
+    .then(() => {
+      logger.info('Discord login successful');
+      addLogEntry('info', '✅ Login no Discord bem-sucedido!');
+    })
+    .catch((error) => {
+      // Detailed error logging
+      const errorDetails = {
+        error: error.message,
+        code: error.code,
+        name: error.name,
+        stack: error.stack,
+        tokenLength: tokenTrimmed.length,
+        tokenPrefix: tokenTrimmed.substring(0, 10),
+      };
+      
+      logger.error('Failed to login to Discord', errorDetails);
+      addLogEntry('error', `❌ Falha ao fazer login no Discord: ${error.message}`, {
+        error: error.message,
+        code: error.code,
+      });
+      
+      // Provide specific error messages based on error type
+      if (error.message.includes('Invalid token') || error.message.includes('401')) {
+        logger.error('AUTHENTICATION ERROR: Invalid Discord bot token', {
+          suggestion: 'Please verify your DISCORD_TOKEN in config.env',
+          tokenFormat: 'Discord bot tokens typically start with letters/numbers and contain dots',
+          tokenLength: tokenTrimmed.length,
+        });
+        addLogEntry('error', '❌ Token inválido! Verifique o DISCORD_TOKEN no config.env', {
+          suggestion: 'O token deve ser do tipo "Bot Token" do Discord Developer Portal',
+        });
+      } else if (error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
+        logger.error('NETWORK ERROR: Cannot reach Discord servers', {
+          suggestion: 'Check your internet connection and firewall settings',
+        });
+        addLogEntry('error', '❌ Erro de rede: Não foi possível conectar aos servidores do Discord', {
+          suggestion: 'Verifique sua conexão com a internet',
+        });
+      } else if (error.message.includes('rate limit') || error.message.includes('429')) {
+        logger.error('RATE LIMIT: Too many login attempts', {
+          suggestion: 'Wait a few minutes before trying again',
+        });
+        addLogEntry('error', '❌ Rate limit: Muitas tentativas de login. Aguarde alguns minutos', {});
+      } else {
+        logger.error('UNKNOWN ERROR: Unexpected error during Discord login', errorDetails);
+        addLogEntry('error', `❌ Erro desconhecido: ${error.message}`, {
+          code: error.code,
+        });
+      }
+      
+      // Don't exit if web UI is enabled - allow user to fix config
+      if (!enableWebUI) {
+        process.exit(1);
+      }
+    });
 } else {
   if (enableWebUI) {
     logger.warn('Discord bot token not configured. Please configure via web UI at http://localhost:' + (process.env.WEBUI_PORT || 3001));
+    addLogEntry('warn', '⚠️ Token do Discord não configurado. Configure via Web UI.', {});
   } else {
     logger.error('Discord bot token not configured. Please set DISCORD_TOKEN in config.env file or enable web UI.');
+    addLogEntry('error', '❌ Token do Discord não configurado. Configure DISCORD_TOKEN no config.env', {});
     process.exit(1);
   }
 }
