@@ -11,6 +11,9 @@ package-lock.json
 .env.*.local
 config.env
 
+# Docker data directory (contains user config)
+data/
+
 # Logs
 logs/
 *.log

@@ -18,11 +18,9 @@ services:
     ports:
       - "${WEBUI_PORT:-3001}:3001"  # Web UI port for configuration
     volumes:
-      # Mount config.env if it exists, otherwise it will be created by the app from template
-      # Note: If config.env doesn't exist locally, Docker may create a directory - the app handles this
-      - ./config.env:/app/config.env:rw  # Main configuration file - edit this or use Web UI
-      # Also mount template so app can create config.env from it
-      - ./config.env.example:/app/config.env.example:ro  # Template file (read-only)
+      # Mount a data directory for persistent configuration
+      # The app will auto-create config.env from template if it doesn't exist
+      - ./data:/app/data:rw
     # Bot connects outbound to Discord Gateway (no inbound ports needed for bot itself)
     # Optional: join existing network if n8n is on same network
     # networks:

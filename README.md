@@ -61,17 +61,20 @@ Also ensure these standard intents are enabled:
    cd discord-relay
    ```
 
-2. **Create your configuration file:**
-   The bot will automatically create `config.env` from `config.env.example` on first run, or you can manually copy it:
+2. **Start the bot with Docker:**
    ```bash
-   cp config.env.example config.env
+   docker-compose up -d
    ```
 
-3. **Edit `config.env`** with your actual values (Discord token, n8n webhook URL, etc.)
+3. **Configure via Web UI:**
+   - Open `http://localhost:3001` in your browser
+   - Fill in your Discord token, n8n webhook URL, etc.
+   - Click "Save Configuration"
+   - Restart the bot: `docker-compose restart`
 
-4. **Start the bot** (see Docker Deployment section below)
+The bot automatically creates `config.env` from the template on first run. Your configuration is stored in the `./data/` directory and persists across updates.
 
-> **Note:** `config.env` is in `.gitignore` and will not be committed to git. This ensures your secrets stay private and your configuration persists across `git pull` updates. The `config.env.example` file serves as a template with all available options documented.
+> **Note:** Both `config.env` and the `data/` directory are in `.gitignore`. Your secrets stay private and persist across `git pull` updates.
 
 ## Configuration
 
@@ -84,7 +87,7 @@ The bot includes a web-based configuration interface that makes setup easy:
    docker run -d \
      --name discord-relay \
      -p 3001:3001 \
-     -v $(pwd)/config.env:/app/config.env:rw \
+     -v $(pwd)/data:/app/data:rw \
      discord-relay
    ```
 
@@ -188,7 +191,7 @@ docker run -d \
   --name discord-relay \
   --restart unless-stopped \
   -p 3001:3001 \
-  -v $(pwd)/config.env:/app/config.env:rw \
+  -v $(pwd)/data:/app/data:rw \
   discord-relay
 ```
 
@@ -201,20 +204,16 @@ docker-compose up -d
 The `docker-compose.yml` file is configured to:
 - Build the image automatically
 - Restart the container unless stopped
-- Load environment variables from `config.env`
-- Mount `config.env` as a volume so the web UI can save configuration
+- Mount the `data/` directory for persistent configuration
+- Auto-create `config.env` from template on first run
 - Expose web UI on port 3001 (configurable via `WEBUI_PORT`)
 - Run alongside other services (n8n, Supabase)
 
 **Important:** 
-- If `config.env` doesn't exist, the bot will automatically create it from `config.env.example` on first run
-- You can also manually copy the template: `cp config.env.example config.env`
-- The `config.env` file will be mounted as a volume so the web UI can save your configuration
-- Your `config.env` is ignored by git, so your secrets stay private and persist across `git pull` updates
-
-**Note for Docker users:** If you see "EISDIR" errors, it means Docker created a directory instead of a file when mounting the volume. To fix this:
-1. Create an empty `config.env` file locally: `touch config.env`
-2. Or let the app create it automatically on first run (it will detect and fix the directory issue)
+- The bot automatically creates `config.env` from the template on first run
+- Configuration is stored in `./data/config.env` (Docker) or `./config.env` (local)
+- The `data/` directory is ignored by git, so your secrets stay private
+- Configuration persists across `git pull` updates and container rebuilds
 
 ## n8n Workflow Setup
 
@@ -386,23 +385,21 @@ Since you're building on a different machine:
    docker load -i discord-relay.tar
    ```
 
-5. **Edit `config.env` on Mac Mini** (or use web UI):
+5. **Create data directory and run the container:**
    ```bash
-   # Edit config.env with your values directly, or use web UI
-   nano config.env  # or use any text editor
-   ```
-
-6. **Run the container:**
-   ```bash
+   mkdir -p data
    docker run -d \
      --name discord-relay \
      --restart unless-stopped \
      -p 3001:3001 \
-     -v $(pwd)/config.env:/app/config.env:rw \
+     -v $(pwd)/data:/app/data:rw \
      discord-relay
    ```
 
-7. **Configure via Web UI** at `http://mac-mini-ip:3001` if needed
+6. **Configure via Web UI** at `http://mac-mini-ip:3001`
+   - The bot will auto-create `config.env` from template on first run
+   - Fill in your Discord token and webhook URL
+   - Click "Save Configuration" and restart the container
 
 ## Project Structure
 
@@ -418,7 +415,9 @@ discord-relay/
 │   └── webui.js      # Web UI server
 ├── webui/
 │   └── index.html    # Web UI interface
-├── config.env        # Main configuration file (edit this! - auto-created from template)
+├── data/             # Docker: persistent config directory (gitignored)
+│   └── config.env    # Your configuration (auto-created from template)
+├── config.env        # Local dev: configuration file (gitignored)
 ├── config.env.example # Configuration template (committed to git)
 ├── Dockerfile        # Container definition
 ├── docker-compose.yml # Docker Compose config

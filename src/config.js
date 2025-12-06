@@ -6,21 +6,26 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load environment variables from config.env file
-const configEnvPath = join(__dirname, '..', 'config.env');
+// Determine config path based on environment
+// Docker: uses /app/data/config.env (mounted volume)
+// Local dev: uses ./config.env (project root)
+const dataDir = join(__dirname, '..', 'data');
+const isDocker = fs.existsSync(dataDir) && fs.statSync(dataDir).isDirectory();
+
+const configEnvPath = isDocker 
+  ? join(dataDir, 'config.env')
+  : join(__dirname, '..', 'config.env');
 const templatePath = join(__dirname, '..', 'config.env.example');
+
+console.log(`[Config] Running in ${isDocker ? 'Docker' : 'local'} mode`);
 console.log(`[Config] Loading config from: ${configEnvPath}`);
 
 // Auto-create config.env from template if it doesn't exist
-// Also handle case where Docker creates a directory instead of a file
 try {
-  if (fs.existsSync(configEnvPath)) {
-    const stats = fs.statSync(configEnvPath);
-    if (stats.isDirectory()) {
-      console.log(`[Config] ⚠️ config.env path is a directory (Docker volume issue), removing it...`);
-      fs.rmSync(configEnvPath, { recursive: true, force: true });
-      console.log(`[Config] Directory removed, will create file from template`);
-    }
+  // Ensure data directory exists in Docker mode
+  if (isDocker && !fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+    console.log(`[Config] Created data directory: ${dataDir}`);
   }
   
   if (!fs.existsSync(configEnvPath)) {
@@ -38,17 +43,9 @@ try {
 
 // Check if file exists
 if (fs.existsSync(configEnvPath)) {
-  try {
-    const stats = fs.statSync(configEnvPath);
-    if (stats.isDirectory()) {
-      console.log(`[Config] ⚠️ config.env is still a directory - Docker volume mount issue`);
-    } else {
-      console.log(`[Config] config.env file exists`);
-      console.log(`[Config] config.env size: ${stats.size} bytes`);
-    }
-  } catch (error) {
-    console.log(`[Config] ⚠️ Error checking config.env: ${error.message}`);
-  }
+  console.log(`[Config] config.env file exists`);
+  const stats = fs.statSync(configEnvPath);
+  console.log(`[Config] config.env size: ${stats.size} bytes`);
 } else {
   console.log(`[Config] ⚠️ config.env file NOT FOUND at ${configEnvPath}`);
 }
