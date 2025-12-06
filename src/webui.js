@@ -34,6 +34,7 @@ const MAX_LOGS = 100;
 
 // Get the config.env file path (use from config module for consistency)
 const configPath = configPathFromConfig || join(__dirname, '..', 'config.env');
+const templatePath = join(__dirname, '..', 'config.env.example');
 
 // Export these functions for use in other modules
 export { readConfigFile, parseEnv };
@@ -93,10 +94,28 @@ function stringifyConfig(config, template) {
   return result.join('\n');
 }
 
-// API: Get current configuration (reads from config.env)
+// API: Get current configuration (reads from config.env, falls back to template)
 app.get('/api/config', async (req, res) => {
   try {
-    const configContent = await readConfigFile();
+    let configContent;
+    try {
+      configContent = await readConfigFile();
+    } catch (error) {
+      // If config.env doesn't exist, try to read from template
+      if (error.code === 'ENOENT' || error.code === 'EISDIR') {
+        try {
+          configContent = await fs.readFile(templatePath, 'utf-8');
+          console.log('[WebUI] config.env not found, reading from template');
+        } catch (templateError) {
+          return res.status(500).json({ 
+            success: false, 
+            error: 'Neither config.env nor config.env.example found. Please ensure the template file exists.' 
+          });
+        }
+      } else {
+        throw error;
+      }
+    }
     const config = parseEnv(configContent);
     
     // Parse N8N_WEBHOOKS JSON if present
@@ -132,12 +151,28 @@ app.post('/api/config', async (req, res) => {
     }
     
     // Read current config.env file (preserves all comments and documentation)
+    // If config.env doesn't exist or is a directory, read from template instead
     let template;
     try {
+      // Check if path exists and is a file (not a directory)
+      const stats = await fs.stat(configPath);
+      if (stats.isDirectory()) {
+        throw new Error('EISDIR'); // Treat directory as error
+      }
       template = await fs.readFile(configPath, 'utf-8');
     } catch (error) {
-      // If config.env doesn't exist, we can't save (shouldn't happen)
-      throw new Error('config.env file not found. Please create it first.');
+      // If config.env doesn't exist or is a directory, try to read from template
+      if (error.code === 'ENOENT' || error.code === 'EISDIR' || error.message === 'EISDIR') {
+        try {
+          template = await fs.readFile(templatePath, 'utf-8');
+          console.log('[WebUI] config.env not found or is a directory, using template to create it');
+        } catch (templateError) {
+          // If template also doesn't exist, we can't save
+          throw new Error('Neither config.env nor config.env.example found. Cannot save configuration.');
+        }
+      } else {
+        throw error;
+      }
     }
     
     // Merge with existing config
@@ -148,8 +183,30 @@ app.post('/api/config', async (req, res) => {
     // Generate config.env content (preserves all comments)
     const configContent = stringifyConfig(mergedConfig, template);
     
-    // Write to config.env file
-    await fs.writeFile(configPath, configContent, 'utf-8');
+    // Write to config.env file (create if it doesn't exist)
+    try {
+      // Check if path is a directory before writing
+      try {
+        const stats = await fs.stat(configPath);
+        if (stats.isDirectory()) {
+          throw new Error(`Cannot write to ${configPath} - it is a directory. This usually happens when Docker mounts a non-existent file. Please create an empty config.env file locally first, or remove the volume mount and let the app create it.`);
+        }
+      } catch (statError) {
+        // File doesn't exist, that's fine - we'll create it
+        if (statError.code !== 'ENOENT') {
+          throw statError;
+        }
+      }
+      
+      await fs.writeFile(configPath, configContent, 'utf-8');
+      console.log(`[WebUI] Configuration saved to ${configPath}`);
+    } catch (error) {
+      // If it's a directory error, provide helpful message
+      if (error.code === 'EISDIR' || error.message.includes('is a directory')) {
+        throw new Error(`Cannot write to ${configPath} - it appears to be a directory. This usually happens when Docker mounts a non-existent file. Solution: Create an empty config.env file locally (touch config.env) or remove the volume mount temporarily.`);
+      }
+      throw error;
+    }
     
     addLogEntry('info', 'Configuration saved successfully');
     

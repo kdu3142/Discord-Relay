@@ -12,21 +12,43 @@ const templatePath = join(__dirname, '..', 'config.env.example');
 console.log(`[Config] Loading config from: ${configEnvPath}`);
 
 // Auto-create config.env from template if it doesn't exist
-if (!fs.existsSync(configEnvPath)) {
-  if (fs.existsSync(templatePath)) {
-    fs.copyFileSync(templatePath, configEnvPath);
-    console.log(`[Config] Created config.env from template`);
-  } else {
-    console.log(`[Config] ⚠️ config.env file NOT FOUND at ${configEnvPath}`);
-    console.log(`[Config] ⚠️ Template file also NOT FOUND at ${templatePath}`);
+// Also handle case where Docker creates a directory instead of a file
+try {
+  if (fs.existsSync(configEnvPath)) {
+    const stats = fs.statSync(configEnvPath);
+    if (stats.isDirectory()) {
+      console.log(`[Config] ⚠️ config.env path is a directory (Docker volume issue), removing it...`);
+      fs.rmSync(configEnvPath, { recursive: true, force: true });
+      console.log(`[Config] Directory removed, will create file from template`);
+    }
   }
+  
+  if (!fs.existsSync(configEnvPath)) {
+    if (fs.existsSync(templatePath)) {
+      fs.copyFileSync(templatePath, configEnvPath);
+      console.log(`[Config] Created config.env from template`);
+    } else {
+      console.log(`[Config] ⚠️ config.env file NOT FOUND at ${configEnvPath}`);
+      console.log(`[Config] ⚠️ Template file also NOT FOUND at ${templatePath}`);
+    }
+  }
+} catch (error) {
+  console.log(`[Config] ⚠️ Error checking/creating config.env: ${error.message}`);
 }
 
 // Check if file exists
 if (fs.existsSync(configEnvPath)) {
-  console.log(`[Config] config.env file exists`);
-  const stats = fs.statSync(configEnvPath);
-  console.log(`[Config] config.env size: ${stats.size} bytes`);
+  try {
+    const stats = fs.statSync(configEnvPath);
+    if (stats.isDirectory()) {
+      console.log(`[Config] ⚠️ config.env is still a directory - Docker volume mount issue`);
+    } else {
+      console.log(`[Config] config.env file exists`);
+      console.log(`[Config] config.env size: ${stats.size} bytes`);
+    }
+  } catch (error) {
+    console.log(`[Config] ⚠️ Error checking config.env: ${error.message}`);
+  }
 } else {
   console.log(`[Config] ⚠️ config.env file NOT FOUND at ${configEnvPath}`);
 }
@@ -271,12 +293,31 @@ export const configPath = configEnvPath;
 
 /**
  * Read config file content directly
+ * Falls back to template if config.env doesn't exist
  */
 export async function readConfigFile() {
   try {
+    // Check if path is a directory (EISDIR error)
+    const stats = await fs.promises.stat(configEnvPath);
+    if (stats.isDirectory()) {
+      throw new Error(`Config path is a directory, not a file: ${configEnvPath}`);
+    }
+    
     const content = await fs.promises.readFile(configEnvPath, 'utf-8');
     return content;
   } catch (error) {
+    // If file doesn't exist, try to read from template
+    if (error.code === 'ENOENT' || error.code === 'EISDIR') {
+      const templatePath = join(__dirname, '..', 'config.env.example');
+      try {
+        console.log(`[Config] config.env not found, reading from template`);
+        const templateContent = await fs.promises.readFile(templatePath, 'utf-8');
+        return templateContent;
+      } catch (templateError) {
+        console.log(`[Config] Error reading template file: ${templateError.message}`);
+        return '';
+      }
+    }
     console.log(`[Config] Error reading config file: ${error.message}`);
     return '';
   }

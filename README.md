@@ -212,6 +212,10 @@ The `docker-compose.yml` file is configured to:
 - The `config.env` file will be mounted as a volume so the web UI can save your configuration
 - Your `config.env` is ignored by git, so your secrets stay private and persist across `git pull` updates
 
+**Note for Docker users:** If you see "EISDIR" errors, it means Docker created a directory instead of a file when mounting the volume. To fix this:
+1. Create an empty `config.env` file locally: `touch config.env`
+2. Or let the app create it automatically on first run (it will detect and fix the directory issue)
+
 ## n8n Workflow Setup
 
 ### 1. Create Webhook Node
