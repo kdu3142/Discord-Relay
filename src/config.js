@@ -8,7 +8,19 @@ const __dirname = dirname(__filename);
 
 // Load environment variables from config.env file
 const configEnvPath = join(__dirname, '..', 'config.env');
+const templatePath = join(__dirname, '..', 'config.env.example');
 console.log(`[Config] Loading config from: ${configEnvPath}`);
+
+// Auto-create config.env from template if it doesn't exist
+if (!fs.existsSync(configEnvPath)) {
+  if (fs.existsSync(templatePath)) {
+    fs.copyFileSync(templatePath, configEnvPath);
+    console.log(`[Config] Created config.env from template`);
+  } else {
+    console.log(`[Config] ⚠️ config.env file NOT FOUND at ${configEnvPath}`);
+    console.log(`[Config] ⚠️ Template file also NOT FOUND at ${templatePath}`);
+  }
+}
 
 // Check if file exists
 if (fs.existsSync(configEnvPath)) {

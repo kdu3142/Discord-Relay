@@ -13,7 +13,7 @@ RUN npm install --only=production && npm cache clean --force
 # Copy application source
 COPY src/ ./src/
 COPY webui/ ./webui/
-COPY config.env ./
+COPY config.env.example ./
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \

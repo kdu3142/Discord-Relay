@@ -9,6 +9,7 @@ package-lock.json
 .env
 .env.local
 .env.*.local
+config.env
 
 # Logs
 logs/

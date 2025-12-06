@@ -53,6 +53,26 @@ Also ensure these standard intents are enabled:
 4. Copy the generated URL and open it in your browser
 5. Select your server and authorize the bot
 
+## Quick Start / First Time Setup
+
+1. **Clone the repository:**
+   ```bash
+   git clone <repository-url>
+   cd discord-relay
+   ```
+
+2. **Create your configuration file:**
+   The bot will automatically create `config.env` from `config.env.example` on first run, or you can manually copy it:
+   ```bash
+   cp config.env.example config.env
+   ```
+
+3. **Edit `config.env`** with your actual values (Discord token, n8n webhook URL, etc.)
+
+4. **Start the bot** (see Docker Deployment section below)
+
+> **Note:** `config.env` is in `.gitignore` and will not be committed to git. This ensures your secrets stay private and your configuration persists across `git pull` updates. The `config.env.example` file serves as a template with all available options documented.
+
 ## Configuration
 
 ### Option 1: Web UI (Recommended)
@@ -89,6 +109,11 @@ The bot includes a web-based configuration interface that makes setup easy:
 ### Option 2: Manual Configuration File
 
 **Edit `config.env` directly** - this is your main configuration file!
+
+If `config.env` doesn't exist, the bot will automatically create it from `config.env.example` on first run. You can also manually copy the template:
+```bash
+cp config.env.example config.env
+```
 
 The `config.env` file is where you store all your actual values:
 - Your Discord bot token
@@ -181,7 +206,11 @@ The `docker-compose.yml` file is configured to:
 - Expose web UI on port 3001 (configurable via `WEBUI_PORT`)
 - Run alongside other services (n8n, Supabase)
 
-**Important:** Make sure you have a `config.env` file in the same directory as `docker-compose.yml`. This file will be mounted as a volume so the web UI can save your configuration.
+**Important:** 
+- If `config.env` doesn't exist, the bot will automatically create it from `config.env.example` on first run
+- You can also manually copy the template: `cp config.env.example config.env`
+- The `config.env` file will be mounted as a volume so the web UI can save your configuration
+- Your `config.env` is ignored by git, so your secrets stay private and persist across `git pull` updates
 
 ## n8n Workflow Setup
 
@@ -316,8 +345,8 @@ Since you're building on a different machine:
 2. **On Mac Mini, ensure `config.env` exists:**
    ```bash
    cd /path/to/discord-relay
-   # config.env should already be in the project
-   # If not, create it: touch config.env
+   # The bot will auto-create config.env from template on first run
+   # Or manually copy: cp config.env.example config.env
    ```
 
 3. **Start with docker-compose:**
@@ -385,7 +414,8 @@ discord-relay/
 │   └── webui.js      # Web UI server
 ├── webui/
 │   └── index.html    # Web UI interface
-├── config.env        # Main configuration file (edit this!)
+├── config.env        # Main configuration file (edit this! - auto-created from template)
+├── config.env.example # Configuration template (committed to git)
 ├── Dockerfile        # Container definition
 ├── docker-compose.yml # Docker Compose config
 └── package.json      # Dependencies
