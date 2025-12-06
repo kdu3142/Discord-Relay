@@ -1,10 +1,24 @@
-import { Client, GatewayIntentBits, Events } from 'discord.js';
-import config from './config.js';
+import { Client, GatewayIntentBits, Events, Partials } from 'discord.js';
+import config, { readConfigFile, parseEnv } from './config.js';
 import logger from './logger.js';
 import { isBotCalled, isGuildAllowed } from './filters.js';
 import { formatMessageEvent } from './payload.js';
 import { sendToN8n } from './relay.js';
 import { startWebUI as startConfigWebUI, addLogEntry, setDiscordClient } from './webui.js';
+
+/**
+ * Check if DMs are allowed (reads from config file for latest value)
+ */
+async function areDMsAllowed() {
+  try {
+    const configContent = await readConfigFile();
+    const envConfig = parseEnv(configContent);
+    return envConfig.ALLOW_DMS === 'true' || envConfig.ALLOW_DMS === '1';
+  } catch (error) {
+    // Fallback to cached config
+    return config.bot.allowDMs;
+  }
+}
 
 // Log configuration on startup (send to both console and WebUI)
 console.log('='.repeat(60));
@@ -36,6 +50,13 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.DirectMessages,        // Required for DMs
+    GatewayIntentBits.DirectMessageTyping,   // Optional: typing indicator in DMs
+  ],
+  // Partials are required to receive DM events (DM channels may not be cached)
+  partials: [
+    Partials.Channel,  // Required for DM channels
+    Partials.Message,  // Required for uncached messages
   ],
 });
 
@@ -61,10 +82,16 @@ client.once(Events.ClientReady, (readyClient) => {
     hasGuilds: intents.has(GatewayIntentBits.Guilds),
     hasGuildMessages: intents.has(GatewayIntentBits.GuildMessages),
     hasMessageContent: intents.has(GatewayIntentBits.MessageContent),
+    hasDirectMessages: intents.has(GatewayIntentBits.DirectMessages),
     intentBits: intents.bitfield?.toString(),
   };
   logger.info('Bot intents configured', intentStatus);
   addLogEntry('info', `Intents configurados: ${intents.toArray().join(', ')}`, intentStatus);
+  
+  // Log DM configuration
+  const dmStatus = config.bot.allowDMs ? '✅ Habilitadas' : '❌ Desabilitadas';
+  logger.info('DM configuration', { allowDMs: config.bot.allowDMs });
+  addLogEntry('info', `📩 Mensagens Diretas (DMs): ${dmStatus}`, { allowDMs: config.bot.allowDMs });
   
   // Log guilds for debugging
   const guildList = readyClient.guilds.cache.map(g => ({ id: g.id, name: g.name }));
@@ -85,6 +112,9 @@ client.once(Events.ClientReady, (readyClient) => {
 // Message create event handler
 client.on(Events.MessageCreate, async (message) => {
   try {
+    const isDM = !message.guild;
+    const channelType = isDM ? 'DM' : 'Guild';
+    
     // Log all messages for debugging (can be filtered by log level)
     logger.debug('Message received', {
       messageId: message.id,
@@ -92,12 +122,19 @@ client.on(Events.MessageCreate, async (message) => {
       authorBot: message.author.bot,
       authorUsername: message.author.username,
       channelId: message.channel.id,
-      channelName: message.channel.name,
-      guildId: message.guild?.id,
-      guildName: message.guild?.name,
+      channelName: message.channel.name || 'DM',
+      channelType,
+      isDM,
+      guildId: message.guild?.id || null,
+      guildName: message.guild?.name || null,
       content: message.content.substring(0, 100), // First 100 chars for debugging
       hasMentions: message.mentions.users.size > 0,
     });
+
+    // For DMs, log at info level so they're visible
+    if (isDM) {
+      console.log(`[Message] DM from ${message.author.username}: ${message.content.substring(0, 50)}...`);
+    }
 
     // Ignore bot messages
     if (message.author.bot) {
@@ -108,9 +145,11 @@ client.on(Events.MessageCreate, async (message) => {
 
     // Handle DMs separately - no prefix/mention needed
     if (!message.guild) {
-      // Check if DMs are allowed
-      if (!config.bot.allowDMs) {
-        logger.debug('Message is DM, but DMs are disabled', {
+      // Check if DMs are allowed (read from config file for latest value)
+      const dmsAllowed = await areDMsAllowed();
+      
+      if (!dmsAllowed) {
+        logger.debug('Message is DM, but DMs are disabled in config', {
           messageId: message.id,
           authorId: message.author.id,
         });
@@ -127,9 +166,10 @@ client.on(Events.MessageCreate, async (message) => {
         authorUsername: message.author.username,
         content: cleanContent.substring(0, 100),
       });
-      addLogEntry('info', `📩 DM recebida de ${message.author.username}`, {
+      addLogEntry('info', `📩 DM recebida de ${message.author.username}: "${cleanContent.substring(0, 50)}"`, {
         messageId: message.id,
         authorId: message.author.id,
+        content: cleanContent.substring(0, 100),
       });
     } else {
       // Server message - check guild and prefix/mention
