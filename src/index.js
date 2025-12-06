@@ -99,55 +99,87 @@ client.on(Events.MessageCreate, async (message) => {
       hasMentions: message.mentions.users.size > 0,
     });
 
-    // Skip if not in a guild (DMs not supported in this version)
+    // Ignore bot messages
+    if (message.author.bot) {
+      return;
+    }
+
+    let rule, cleanContent;
+
+    // Handle DMs separately - no prefix/mention needed
     if (!message.guild) {
-      logger.debug('Message is DM, skipping (DMs not supported)', {
+      // Check if DMs are allowed
+      if (!config.bot.allowDMs) {
+        logger.debug('Message is DM, but DMs are disabled', {
+          messageId: message.id,
+          authorId: message.author.id,
+        });
+        return;
+      }
+
+      // DM - treat entire message as the command
+      rule = 'dm';
+      cleanContent = message.content.trim();
+
+      logger.info('DM received - processing message', {
+        messageId: message.id,
+        authorId: message.author.id,
+        authorUsername: message.author.username,
+        content: cleanContent.substring(0, 100),
+      });
+      addLogEntry('info', `📩 DM recebida de ${message.author.username}`, {
         messageId: message.id,
         authorId: message.author.id,
       });
-      return;
-    }
+    } else {
+      // Server message - check guild and prefix/mention
 
-    // Check if guild is allowed (if restriction is configured)
-    if (!isGuildAllowed(message.guild)) {
-      logger.debug('Message from disallowed guild, skipping', {
-        guildId: message.guild.id,
-        guildName: message.guild.name,
-        messageId: message.id,
-      });
-      return;
-    }
+      // Check if guild is allowed (if restriction is configured)
+      if (!isGuildAllowed(message.guild)) {
+        logger.debug('Message from disallowed guild, skipping', {
+          guildId: message.guild.id,
+          guildName: message.guild.name,
+          messageId: message.id,
+        });
+        return;
+      }
 
-    // Check if bot was called
-    const { called, rule, cleanContent } = isBotCalled(message, client);
+      // Check if bot was called (prefix or mention)
+      const callResult = isBotCalled(message, client);
 
-    if (!called) {
-      logger.debug('Bot was not called in message, ignoring', {
-        messageId: message.id,
-        content: message.content.substring(0, 50),
-        prefix: config.bot.prefix,
-        botMentioned: message.mentions.has(client.user),
-      });
-      return; // Bot was not called, ignore message
+      if (!callResult.called) {
+        logger.debug('Bot was not called in message, ignoring', {
+          messageId: message.id,
+          content: message.content.substring(0, 50),
+          prefix: config.bot.prefix,
+          botMentioned: message.mentions.has(client.user),
+        });
+        return; // Bot was not called, ignore message
+      }
+
+      rule = callResult.rule;
+      cleanContent = callResult.cleanContent;
     }
 
     logger.info('Bot was called - processing message', {
       messageId: message.id,
-      rule,
-      cleanContent,
-    });
-
-    logger.info('Bot was called', {
-      messageId: message.id,
       channelId: message.channel.id,
-      channelName: message.channel.name,
-      guildId: message.guild.id,
-      guildName: message.guild.name,
+      channelName: message.channel.name || 'dm',
+      guildId: message.guild?.id || null,
+      guildName: message.guild?.name || 'DM',
       authorId: message.author.id,
       authorUsername: message.author.username,
       rule,
       cleanContent,
+      isDM: !message.guild,
     });
+
+    if (rule !== 'dm') {
+      addLogEntry('info', `💬 Bot acionado via ${rule}: "${cleanContent.substring(0, 50)}"`, {
+        messageId: message.id,
+        rule,
+      });
+    }
 
     // Format the payload
     const payload = formatMessageEvent(message, 'message_create', rule);

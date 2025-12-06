@@ -195,6 +195,8 @@ const config = {
     allowedGuildIds: process.env.ALLOWED_GUILD_IDS
       ? process.env.ALLOWED_GUILD_IDS.split(',').map(id => id.trim()).filter(Boolean)
       : null,
+    // Allow DMs - any DM to the bot triggers the webhook (no prefix needed)
+    allowDMs: process.env.ALLOW_DMS === 'true' || process.env.ALLOW_DMS === '1',
   },
   logging: {
     level: process.env.LOG_LEVEL || 'info',
@@ -212,7 +214,7 @@ export function reloadConfig() {
   // Clear cached env vars that were loaded from config.env
   const keysToReload = [
     'DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'N8N_WEBHOOK_URL', 'N8N_WEBHOOKS',
-    'RELAY_SHARED_SECRET', 'BOT_PREFIX', 'ALLOWED_GUILD_IDS', 'LOG_LEVEL'
+    'RELAY_SHARED_SECRET', 'BOT_PREFIX', 'ALLOWED_GUILD_IDS', 'ALLOW_DMS', 'LOG_LEVEL'
   ];
   
   keysToReload.forEach(key => {
@@ -254,6 +256,7 @@ export function reloadConfig() {
       allowedGuildIds: process.env.ALLOWED_GUILD_IDS
         ? process.env.ALLOWED_GUILD_IDS.split(',').map(id => id.trim()).filter(Boolean)
         : null,
+      allowDMs: process.env.ALLOW_DMS === 'true' || process.env.ALLOW_DMS === '1',
     },
     logging: {
       level: process.env.LOG_LEVEL || 'info',

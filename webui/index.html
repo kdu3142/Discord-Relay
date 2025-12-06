@@ -694,6 +694,17 @@
                         Lista separada por vírgulas de IDs de servidores Discord. Deixe vazio para permitir todos.
                     </div>
                 </div>
+                
+                <div class="form-group">
+                    <label for="ALLOW_DMS">
+                        <input type="checkbox" id="ALLOW_DMS" name="ALLOW_DMS" value="true" style="width: auto; margin-right: 8px;">
+                        Permitir Mensagens Diretas (DMs)
+                    </label>
+                    <div class="help-text">
+                        Quando habilitado, qualquer mensagem enviada diretamente ao bot (DM) será encaminhada para o webhook.<br>
+                        <strong>Não precisa de prefixo ou menção em DMs</strong> - a mensagem vai direto para o n8n.
+                    </div>
+                </div>
             </div>
             
             <div class="section">
@@ -762,10 +773,22 @@
                 <p>O Discord Relay Bot é um serviço intermediário que conecta Discord ao n8n. Ele:</p>
                 <ul style="margin: 15px 0; padding-left: 25px;">
                     <li>Conecta-se ao Discord via Gateway usando discord.js</li>
-                    <li>Escuta mensagens onde o bot é chamado (prefixo ou menção)</li>
+                    <li>Escuta mensagens onde o bot é chamado (prefixo, menção ou DM)</li>
                     <li>Formata payloads JSON normalizados</li>
                     <li>Envia POST requests para webhooks n8n com assinatura HMAC</li>
                 </ul>
+                
+                <h2>📩 Mensagens Diretas (DMs)</h2>
+                <p>O bot pode responder a mensagens diretas (DMs) quando habilitado:</p>
+                <ul style="margin: 15px 0; padding-left: 25px;">
+                    <li>Habilite <strong>"Permitir Mensagens Diretas"</strong> na configuração</li>
+                    <li><strong>Não precisa de prefixo ou menção</strong> - qualquer mensagem enviada diretamente ao bot é processada</li>
+                    <li>O payload terá <code>"matched_rule": "dm"</code> e <code>"guild": null</code></li>
+                    <li>Útil para interações privadas com o bot</li>
+                </ul>
+                <p style="background: #e8f5e9; padding: 10px; border-radius: 4px; margin: 15px 0;">
+                    <strong>💡 Dica:</strong> Em DMs, a mensagem inteira é enviada como <code>clean_content</code>, permitindo conversas naturais sem prefixos.
+                </p>
                 
                 <h2>🔗 Múltiplos Webhooks</h2>
                 <p>Você pode configurar múltiplos webhooks para diferentes workflows no n8n:</p>
@@ -1105,6 +1128,10 @@ return $json;</pre>
             const formData = new FormData(form);
             const config = Object.fromEntries(formData);
             
+            // Handle checkbox inputs (FormData doesn't include unchecked checkboxes)
+            const allowDmsCheckbox = document.getElementById('ALLOW_DMS');
+            config.ALLOW_DMS = allowDmsCheckbox.checked ? 'true' : 'false';
+            
             // Collect webhooks
             const webhooks = {};
             document.querySelectorAll('.webhook-item').forEach(item => {
@@ -1171,7 +1198,12 @@ return $json;</pre>
                         } else {
                             const input = document.getElementById(key);
                             if (input) {
-                                input.value = config[key] || '';
+                                // Handle checkbox inputs
+                                if (input.type === 'checkbox') {
+                                    input.checked = config[key] === 'true' || config[key] === '1' || config[key] === true;
+                                } else {
+                                    input.value = config[key] || '';
+                                }
                             }
                         }
                     });
@@ -1189,9 +1221,13 @@ return $json;</pre>
         // Add webhook field
         function addWebhook(name = '', url = '') {
             const container = document.getElementById('webhooksContainer');
+            
+            // Capture current counter value to avoid closure issues
+            const currentId = webhookCounter;
+            
             const div = document.createElement('div');
             div.className = 'webhook-item';
-            div.id = `webhook-${webhookCounter}`;
+            div.id = `webhook-${currentId}`;
             
             // Create elements safely to prevent XSS
             const nameInput = document.createElement('input');
@@ -1206,22 +1242,22 @@ return $json;</pre>
             urlInput.placeholder = 'URL do Webhook';
             urlInput.value = url; // Safe: input.value escapes automatically
             urlInput.onchange = updateWebhooks;
-            urlInput.id = `webhook-url-${webhookCounter}`;
+            urlInput.id = `webhook-url-${currentId}`;
             
             const testBtn = document.createElement('button');
             testBtn.type = 'button';
             testBtn.className = 'btn-test';
             testBtn.textContent = 'Testar';
-            testBtn.onclick = () => testWebhookField(`webhook-url-${webhookCounter}`);
+            testBtn.onclick = () => testWebhookField(`webhook-url-${currentId}`);
             
             const removeBtn = document.createElement('button');
             removeBtn.type = 'button';
             removeBtn.className = 'remove-webhook-btn';
             removeBtn.textContent = 'Remover';
-            removeBtn.onclick = () => removeWebhook(webhookCounter);
+            removeBtn.onclick = () => removeWebhook(currentId);
             
             const resultDiv = document.createElement('div');
-            resultDiv.id = `testResult-webhook-url-${webhookCounter}`;
+            resultDiv.id = `testResult-webhook-url-${currentId}`;
             
             div.appendChild(nameInput);
             div.appendChild(urlInput);
