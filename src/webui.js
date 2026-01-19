@@ -68,6 +68,7 @@ export function addLogEntry(level, message, data = {}) {
 function stringifyConfig(config, template) {
   const lines = template.split('\n');
   const result = [];
+  const seenKeys = new Set();
   
   for (const line of lines) {
     if (line.trim().startsWith('#')) {
@@ -77,6 +78,7 @@ function stringifyConfig(config, template) {
       const match = line.match(/^([^=]+)=/);
       if (match) {
         const key = match[1].trim();
+        seenKeys.add(key);
         if (config[key] !== undefined && config[key] !== '') {
           // Update the value while preserving the line structure
           result.push(`${key}=${config[key]}`);
@@ -87,6 +89,17 @@ function stringifyConfig(config, template) {
       } else {
         // Keep empty lines and other content
         result.push(line);
+      }
+    }
+  }
+  
+  // Append new keys that are not in the template (e.g., newly added settings)
+  const missingKeys = Object.keys(config).filter((key) => !seenKeys.has(key));
+  if (missingKeys.length > 0) {
+    result.push('');
+    for (const key of missingKeys) {
+      if (config[key] !== undefined && config[key] !== '') {
+        result.push(`${key}=${config[key]}`);
       }
     }
   }
@@ -139,6 +152,9 @@ app.get('/api/config', async (req, res) => {
 app.post('/api/config', async (req, res) => {
   try {
     const newConfig = req.body;
+    addLogEntry('info', '💾 Salvando configuração...', {
+      keys: Object.keys(newConfig || {}),
+    });
     
     // Handle multiple webhooks
     if (newConfig.N8N_WEBHOOKS_PARSED) {
@@ -146,6 +162,9 @@ app.post('/api/config', async (req, res) => {
         newConfig.N8N_WEBHOOKS = JSON.stringify(newConfig.N8N_WEBHOOKS_PARSED);
         delete newConfig.N8N_WEBHOOKS_PARSED;
       } catch (e) {
+        addLogEntry('error', '❌ Falha ao salvar configuração: webhooks inválidos', {
+          error: e.message,
+        });
         return res.status(400).json({ success: false, error: 'Invalid webhooks JSON format' });
       }
     }
@@ -208,10 +227,13 @@ app.post('/api/config', async (req, res) => {
       throw error;
     }
     
-    addLogEntry('info', 'Configuration saved successfully');
+    addLogEntry('info', '✅ Configuração salva com sucesso', {
+      updatedKeys: Object.keys(newConfig || {}),
+    });
     
     res.json({ success: true, message: 'Configuration saved to config.env successfully!' });
   } catch (error) {
+    addLogEntry('error', `❌ Erro ao salvar configuração: ${error.message}`);
     res.status(500).json({ success: false, error: error.message });
   }
 });

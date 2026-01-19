@@ -759,10 +759,7 @@
             
             <div id="diagnosisResult" style="margin-top: 20px; display: none;"></div>
         </form>
-    </div>
-    
-    <!-- Logs Tab -->
-    <div id="logsTab" class="tab-content">
+
         <div class="section">
             <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
                 <span>📊 Logs em Tempo Real</span>
@@ -786,6 +783,14 @@
             <div style="margin-top: 10px; font-size: 12px; color: var(--text-light);">
                 <span id="logCount">0</span> entradas | Últimos <span id="maxLogs">100</span> logs
             </div>
+        </div>
+    </div>
+    
+    <!-- Logs Tab -->
+    <div id="logsTab" class="tab-content">
+        <div class="section">
+            <div class="section-title">📊 Logs em Tempo Real</div>
+            <div class="help-text">Os logs agora ficam no final da aba Configuração.</div>
         </div>
     </div>
     
@@ -1138,7 +1143,7 @@ return $json;</pre>
                 floatingActions.classList.add('hidden');
             }
             
-            if (tabName === 'logs') {
+            if (tabName === 'config') {
                 startLogStream();
             } else if (eventSource) {
                 eventSource.close();
@@ -1862,6 +1867,7 @@ return $json;</pre>
         // Load config and check status on page load
         loadConfig();
         fetchServerInfo();
+        startLogStream();
         setTimeout(() => {
             checkBotStatus();
             // Start auto-refresh if checkbox is checked
