@@ -683,7 +683,7 @@
                     <label for="BOT_PREFIX">Prefixo do Comando</label>
                     <input type="text" id="BOT_PREFIX" name="BOT_PREFIX" value="!bot">
                     <div class="help-text">
-                        Prefixo para acionar o bot (ex: !bot, !tobias). O bot também responde a menções.
+                        Prefixo para acionar o bot (ex: !bot, !tobias). O bot tambem responde a mencoes; @everyone/@here se habilitado.
                     </div>
                 </div>
                 
@@ -703,6 +703,16 @@
                     <div class="help-text">
                         Quando habilitado, qualquer mensagem enviada diretamente ao bot (DM) será encaminhada para o webhook.<br>
                         <strong>Não precisa de prefixo ou menção em DMs</strong> - a mensagem vai direto para o n8n.
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="ALLOW_EVERYONE_MENTIONS">
+                        <input type="checkbox" id="ALLOW_EVERYONE_MENTIONS" name="ALLOW_EVERYONE_MENTIONS" value="true" style="width: auto; margin-right: 8px;" checked>
+                        Permitir @everyone/@here acionar o bot
+                    </label>
+                    <div class="help-text">
+                        Quando habilitado, mensagens com @everyone ou @here tambem acionam o webhook.
                     </div>
                 </div>
             </div>
@@ -1131,6 +1141,10 @@ return $json;</pre>
             // Handle checkbox inputs (FormData doesn't include unchecked checkboxes)
             const allowDmsCheckbox = document.getElementById('ALLOW_DMS');
             config.ALLOW_DMS = allowDmsCheckbox.checked ? 'true' : 'false';
+            const allowEveryoneMentionsCheckbox = document.getElementById('ALLOW_EVERYONE_MENTIONS');
+            if (allowEveryoneMentionsCheckbox) {
+                config.ALLOW_EVERYONE_MENTIONS = allowEveryoneMentionsCheckbox.checked ? 'true' : 'false';
+            }
             
             // Collect webhooks
             const webhooks = {};

@@ -7,7 +7,7 @@ import { EventEmitter } from 'events';
 import { testWebhook, sendToN8n } from './relay.js';
 import { formatMessageEvent } from './payload.js';
 import { isBotCalled } from './filters.js';
-import { 
+import config, { 
   configPath as configPathFromConfig, 
   reloadConfig, 
   readConfigFile, 
@@ -384,12 +384,15 @@ app.post('/api/test-discord', async (req, res) => {
     }
 
     const { testMessage } = req.body;
-    // Get prefix from config (read from env)
-    const configContent = await readConfigFile();
-    const config = parseEnv(configContent);
-    const prefix = config.BOT_PREFIX || '!bot';
+    // Use the same config source as runtime
+    const prefix = config.bot.prefix || '!bot';
     const testMsg = testMessage || `${prefix} teste`;
     
+    const botMention = `<@${discordClient.user.id}>`;
+    const botMentionAlt = `<@!${discordClient.user.id}>`;
+    const botMentioned = testMsg.includes(botMention) || testMsg.includes(botMentionAlt);
+    const everyoneMentioned = testMsg.includes('@everyone') || testMsg.includes('@here');
+
     // Create a mock message object that mimics Discord's message structure
     const mockMessage = {
       id: `test_${Date.now()}`,
@@ -414,14 +417,14 @@ app.post('/api/test-discord', async (req, res) => {
       },
       mentions: {
         has: (user) => {
-          // Check if message mentions the bot
-          const botMention = `<@${discordClient.user.id}>`;
-          const botMentionAlt = `<@!${discordClient.user.id}>`;
-          return testMsg.includes(botMention) || testMsg.includes(botMentionAlt);
+          const userId = typeof user === 'string' ? user : user?.id;
+          return userId === discordClient.user.id && botMentioned;
         },
         users: {
-          size: 0,
+          has: (userId) => userId === discordClient.user.id && botMentioned,
+          size: botMentioned ? 1 : 0,
         },
+        everyone: everyoneMentioned,
       },
       attachments: [],
       embeds: [],
@@ -442,7 +445,7 @@ app.post('/api/test-discord', async (req, res) => {
         details: {
           message: mockMessage.content,
           prefix: prefix,
-          botMentioned: mockMessage.mentions.has(discordClient.user),
+          botMentioned,
           suggestion: `Try: "${prefix} teste" or mention the bot (@${botTag})`,
         },
       });
@@ -451,7 +454,7 @@ app.post('/api/test-discord', async (req, res) => {
     addLogEntry('info', `✅ Bot acionado via ${rule}: "${cleanContent}"`);
 
     // Format the payload
-    const payload = formatMessageEvent(mockMessage, 'message_create', rule);
+    const payload = formatMessageEvent(mockMessage, 'message_create', rule, cleanContent);
 
     // Send to all configured n8n webhooks
     const results = await sendToN8n(payload);

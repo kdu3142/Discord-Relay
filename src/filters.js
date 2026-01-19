@@ -27,13 +27,24 @@ export function isBotCalled(message, client) {
     };
   }
 
-  // Check mention trigger (bot is mentioned in the message)
-  if (message.mentions.has(client.user)) {
+  // Check mention trigger (bot is mentioned or @everyone/@here is allowed)
+  const mentionPattern = new RegExp(`<@!?${client.user.id}>`, 'g');
+  const mentionPatternTest = new RegExp(`<@!?${client.user.id}>`);
+  const botMentioned = mentionPatternTest.test(content) ||
+    Boolean(message.mentions?.users?.has?.(client.user.id));
+  const everyoneMentioned = Boolean(message.mentions?.everyone);
+  const allowEveryoneMentions = config.bot.allowEveryoneMentions;
+
+  if (botMentioned || (allowEveryoneMentions && everyoneMentioned)) {
     // Remove the mention from content to get clean content
     let cleanContent = content;
     // Replace user mention patterns: <@USER_ID> or <@!USER_ID>
-    const mentionPattern = new RegExp(`<@!?${client.user.id}>`, 'g');
-    cleanContent = cleanContent.replace(mentionPattern, '').trim();
+    if (botMentioned) {
+      cleanContent = cleanContent.replace(mentionPattern, '').trim();
+    }
+    if (!botMentioned && everyoneMentioned) {
+      cleanContent = cleanContent.replace(/@everyone/g, '').replace(/@here/g, '').trim();
+    }
     
     return {
       called: true,

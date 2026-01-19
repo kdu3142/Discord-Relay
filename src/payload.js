@@ -3,9 +3,10 @@
  * @param {import('discord.js').Message} message - The Discord message object
  * @param {string} eventType - The event type (e.g., "message_create")
  * @param {string} matchedRule - The rule that triggered the bot (e.g., "prefix:!bot" or "mention")
+ * @param {string | null} cleanContentOverride - Cleaned message content (optional)
  * @returns {Object} - Normalized payload object
  */
-export function formatMessageEvent(message, eventType, matchedRule) {
+export function formatMessageEvent(message, eventType, matchedRule, cleanContentOverride = null) {
   const timestamp = new Date().toISOString();
   const messageTimestamp = message.createdAt.toISOString();
 
@@ -46,7 +47,9 @@ export function formatMessageEvent(message, eventType, matchedRule) {
   };
 
   // Get clean content (already processed by filters)
-  const cleanContent = message.content.trim();
+  const cleanContent = typeof cleanContentOverride === 'string'
+    ? cleanContentOverride
+    : message.content.trim();
 
   // Build the payload
   const payload = {

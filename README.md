@@ -6,7 +6,7 @@ A Dockerized Discord Gateway bot that relays Discord events (when the bot is cal
 
 This bot acts as a relay service that:
 - Connects to Discord via Gateway using `discord.js`
-- Listens for messages where the bot is called (prefix `!bot` or mention)
+- Listens for messages where the bot is called (prefix `!bot`, bot mention, or @everyone/@here when enabled)
 - Formats normalized JSON payloads
 - POSTs to n8n webhook with HMAC signature for security
 - Runs as a Docker container alongside Supabase and n8n
@@ -140,6 +140,7 @@ The file contains detailed comments explaining:
 - `RELAY_SHARED_SECRET` - Secret for HMAC signing (generate with: `openssl rand -hex 32`)
 - `ALLOWED_GUILD_IDS` - Comma-separated guild IDs to restrict processing
 - `BOT_PREFIX` - Command prefix (default: `!bot`)
+- `ALLOW_EVERYONE_MENTIONS` - Allow @everyone/@here to trigger the webhook (default: `true`)
 - `LOG_LEVEL` - Logging verbosity (default: `info`)
 - `START_WEBUI` - Enable web UI for configuration (default: `true`)
 - `WEBUI_PORT` - Port for web UI (default: `3001`)
@@ -298,6 +299,7 @@ Use n8n's **Discord** node or **HTTP Request** node to send messages back:
 In your Discord server:
 - Type `!bot hello` (or your configured prefix)
 - Or mention the bot: `@YourBot hello`
+- Optional: use `@everyone`/`@here` if enabled
 
 Check the logs to verify:
 1. Bot received the message

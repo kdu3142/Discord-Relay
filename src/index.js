@@ -188,11 +188,14 @@ client.on(Events.MessageCreate, async (message) => {
       const callResult = isBotCalled(message, client);
 
       if (!callResult.called) {
+        const mentionPatternTest = new RegExp(`<@!?${client.user.id}>`);
+        const botMentioned = mentionPatternTest.test(message.content) ||
+          Boolean(message.mentions?.users?.has?.(client.user.id));
         logger.debug('Bot was not called in message, ignoring', {
           messageId: message.id,
           content: message.content.substring(0, 50),
           prefix: config.bot.prefix,
-          botMentioned: message.mentions.has(client.user),
+          botMentioned,
         });
         return; // Bot was not called, ignore message
       }
@@ -222,7 +225,7 @@ client.on(Events.MessageCreate, async (message) => {
     }
 
     // Format the payload
-    const payload = formatMessageEvent(message, 'message_create', rule);
+    const payload = formatMessageEvent(message, 'message_create', rule, cleanContent);
 
     // Send to all configured n8n webhooks
     const results = await sendToN8n(payload);

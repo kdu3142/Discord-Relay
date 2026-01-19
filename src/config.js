@@ -216,6 +216,12 @@ const config = {
       : null,
     // Allow DMs - any DM to the bot triggers the webhook (no prefix needed)
     allowDMs: process.env.ALLOW_DMS === 'true' || process.env.ALLOW_DMS === '1',
+    // Allow @everyone/@here to trigger the webhook (defaults to enabled for backward compatibility)
+    allowEveryoneMentions: (() => {
+      const rawValue = process.env.ALLOW_EVERYONE_MENTIONS;
+      if (rawValue === undefined) return true;
+      return rawValue === 'true' || rawValue === '1';
+    })(),
   },
   logging: {
     level: process.env.LOG_LEVEL || 'info',
@@ -233,7 +239,8 @@ export function reloadConfig() {
   // Clear cached env vars that were loaded from config.env
   const keysToReload = [
     'DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'N8N_WEBHOOK_URL', 'N8N_WEBHOOKS',
-    'RELAY_SHARED_SECRET', 'BOT_PREFIX', 'ALLOWED_GUILD_IDS', 'ALLOW_DMS', 'LOG_LEVEL'
+    'RELAY_SHARED_SECRET', 'BOT_PREFIX', 'ALLOWED_GUILD_IDS', 'ALLOW_DMS',
+    'ALLOW_EVERYONE_MENTIONS', 'LOG_LEVEL'
   ];
   
   keysToReload.forEach(key => {
@@ -250,7 +257,7 @@ export function reloadConfig() {
   console.log('[Config] Reloaded config.env successfully');
   
   // Return new config values
-  return {
+  const newConfig = {
     discord: {
       token: cleanToken(process.env.DISCORD_TOKEN),
       clientId: cleanToken(process.env.DISCORD_CLIENT_ID),
@@ -276,11 +283,24 @@ export function reloadConfig() {
         ? process.env.ALLOWED_GUILD_IDS.split(',').map(id => id.trim()).filter(Boolean)
         : null,
       allowDMs: process.env.ALLOW_DMS === 'true' || process.env.ALLOW_DMS === '1',
+      allowEveryoneMentions: (() => {
+        const rawValue = process.env.ALLOW_EVERYONE_MENTIONS;
+        if (rawValue === undefined) return true;
+        return rawValue === 'true' || rawValue === '1';
+      })(),
     },
     logging: {
       level: process.env.LOG_LEVEL || 'info',
     },
   };
+  
+  config.discord = newConfig.discord;
+  config.n8n = newConfig.n8n;
+  config.relay = newConfig.relay;
+  config.bot = newConfig.bot;
+  config.logging = newConfig.logging;
+  
+  return config;
 }
 
 /**
