@@ -227,6 +227,13 @@ app.post('/api/config', async (req, res) => {
       throw error;
     }
     
+    const reloadedConfig = reloadConfig();
+    if (reloadedConfig) {
+      addLogEntry('info', '🔄 Configuração recarregada na memória');
+    } else {
+      addLogEntry('warn', '⚠️ Falha ao recarregar configuração na memória');
+    }
+
     addLogEntry('info', '✅ Configuração salva com sucesso', {
       updatedKeys: Object.keys(newConfig || {}),
     });
