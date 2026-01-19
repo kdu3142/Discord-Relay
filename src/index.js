@@ -184,13 +184,35 @@ client.on(Events.MessageCreate, async (message) => {
         return;
       }
 
+      const content = message.content.trim();
+      const prefix = config.bot.prefix;
+      const mentionPatternTest = new RegExp(`<@!?${client.user.id}>`);
+      const botMentioned = mentionPatternTest.test(message.content) ||
+        Boolean(message.mentions?.users?.has?.(client.user.id));
+      const everyoneMentioned = Boolean(message.mentions?.everyone);
+      const allowEveryoneMentions = config.bot.allowEveryoneMentions;
+      const calledByPrefix = content.startsWith(prefix + ' ') || content === prefix;
+
+      if (everyoneMentioned) {
+        addLogEntry('info', `📣 @everyone/@here detectado (permitido: ${allowEveryoneMentions ? 'sim' : 'nao'})`, {
+          messageId: message.id,
+          guildId: message.guild?.id || null,
+          channelId: message.channel.id,
+          allowEveryoneMentions,
+        });
+      }
+
       // Check if bot was called (prefix or mention)
       const callResult = isBotCalled(message, client);
 
       if (!callResult.called) {
-        const mentionPatternTest = new RegExp(`<@!?${client.user.id}>`);
-        const botMentioned = mentionPatternTest.test(message.content) ||
-          Boolean(message.mentions?.users?.has?.(client.user.id));
+        if (everyoneMentioned && !allowEveryoneMentions) {
+          addLogEntry('warn', '🚫 @everyone/@here ignorado: filtro desativado', {
+            messageId: message.id,
+            guildId: message.guild?.id || null,
+            channelId: message.channel.id,
+          });
+        }
         logger.debug('Bot was not called in message, ignoring', {
           messageId: message.id,
           content: message.content.substring(0, 50),
@@ -202,6 +224,22 @@ client.on(Events.MessageCreate, async (message) => {
 
       rule = callResult.rule;
       cleanContent = callResult.cleanContent;
+
+      if (everyoneMentioned) {
+        if (allowEveryoneMentions && !calledByPrefix && !botMentioned) {
+          addLogEntry('info', '✅ @everyone/@here acionou o webhook', {
+            messageId: message.id,
+            guildId: message.guild?.id || null,
+            channelId: message.channel.id,
+          });
+        } else {
+          addLogEntry('info', 'ℹ️ @everyone/@here presente; webhook acionado por prefixo/menção direta', {
+            messageId: message.id,
+            guildId: message.guild?.id || null,
+            channelId: message.channel.id,
+          });
+        }
+      }
     }
 
     logger.info('Bot was called - processing message', {
