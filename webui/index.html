@@ -1188,6 +1188,7 @@ return $json;</pre>
                 if (data.success) {
                     showToast('✅ Configuração salva com sucesso!', 'success');
                     updateWebhookCount();
+                    forceReconnect();
                 } else {
                     throw new Error(data.error || 'Falha ao salvar configuração');
                 }
