@@ -189,7 +189,11 @@ client.on(Events.MessageCreate, async (message) => {
       const mentionPatternTest = new RegExp(`<@!?${client.user.id}>`);
       const botMentioned = mentionPatternTest.test(message.content) ||
         Boolean(message.mentions?.users?.has?.(client.user.id));
-      const everyoneMentioned = Boolean(message.mentions?.everyone);
+      const everyoneMentionedInContent = /(^|\s)@everyone(?=\s|$|[!,.?])/g.test(content);
+      const hereMentionedInContent = /(^|\s)@here(?=\s|$|[!,.?])/g.test(content);
+      const everyoneMentioned = Boolean(message.mentions?.everyone) ||
+        everyoneMentionedInContent ||
+        hereMentionedInContent;
       const allowEveryoneMentions = config.bot.allowEveryoneMentions;
       const calledByPrefix = content.startsWith(prefix + ' ') || content === prefix;
 
@@ -199,6 +203,7 @@ client.on(Events.MessageCreate, async (message) => {
           guildId: message.guild?.id || null,
           channelId: message.channel.id,
           allowEveryoneMentions,
+          detectedInContent: everyoneMentionedInContent || hereMentionedInContent,
         });
       }
 
